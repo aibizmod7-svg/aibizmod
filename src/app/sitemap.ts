@@ -25,6 +25,13 @@ const staticRoutes = [
   '/contact',
   '/faq',
   '/services',
+  '/ai-visibility-prompts',
+  '/how-we-audit-ai-visibility',
+  '/ai-visibility-audit-report',
+  '/tools',
+  '/clients',
+  '/careers',
+  '/social-media-platforms',
   // All top‑level service pages
   ...services.map((s) => `/services/${s.id}`),
   // All sub‑service pages

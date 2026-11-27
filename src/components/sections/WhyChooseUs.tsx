@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, memo } from "react";
-import { useInView, animate, motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { Award, Clock, Globe, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import AnimatedSection from "@/components/common/AnimatedSection";
@@ -10,26 +10,6 @@ import {
   TextRevealCardTitle,
   TextRevealCardDescription,
 } from "@/components/ui/diagram-card";
-
-// Counter component for animated statistics
-function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
-
-  useEffect(() => {
-    if (isInView) {
-      const controls = animate(0, value, {
-        duration: 2.0,
-        ease: "easeOut",
-        onUpdate: (latest) => setCount(Math.round(latest)),
-      });
-      return () => controls.stop();
-    }
-  }, [isInView, value]);
-
-  return <span ref={ref}>{count}{suffix}</span>;
-}
 
 // Section-wide floating canvas-based particles component with static Gravity behavior
 const SectionCanvasParticles = ({
@@ -345,7 +325,7 @@ export default function WhyChooseUs() {
                       <div className="space-y-1">
                         <span className="block font-display text-[26px] font-bold text-ink group-hover:text-white tracking-tight leading-none transition-colors duration-300">
                           {stat.numericValue !== undefined ? (
-                            <Counter value={stat.numericValue} suffix={stat.suffix} />
+                            <>{stat.numericValue}{stat.suffix}</>
                           ) : (
                             stat.textValue
                           )}
