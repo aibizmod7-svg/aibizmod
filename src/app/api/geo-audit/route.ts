@@ -97,6 +97,7 @@ export interface AuditResult {
   scoreBreakDown: Record<string, number>;
   categoryDetails: CategoryDetail[];
   criticalIssues: Issue[];
+  issues: Issue[];
   quickWins: QuickWin[];
   aiPlatforms: PlatformScore[];
   entities: EntityCheck[];
@@ -1495,7 +1496,8 @@ export async function POST(request: NextRequest) {
         brandAuthority: brandRes.score,
       },
       categoryDetails,
-      criticalIssues: issues,
+      criticalIssues: issues.filter(issue => issue.severity === "critical"),
+      issues,
       quickWins,
       aiPlatforms,
       entities,

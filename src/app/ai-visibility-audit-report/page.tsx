@@ -288,6 +288,34 @@ type ContentMetric = Record<string, any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AuditResult = Record<string, any>;
 
+const AUDIT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function readCachedAudit(domain: string): AuditResult | null {
+  const key = `audit-cache-${domain}`;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw) as AuditResult;
+    const checkedAt = Date.parse(cached?.checkedAt);
+    const age = Date.now() - checkedAt;
+    if (
+      cached?.error ||
+      !Number.isFinite(checkedAt) ||
+      age < 0 ||
+      age > AUDIT_CACHE_TTL_MS
+    ) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
+    return cached;
+  } catch (error) {
+    console.error("[Aibizmod] Failed to read cached audit:", error);
+    return null;
+  }
+}
+
 type RoadmapPhase = {
   month: string;
   title: string;
@@ -1347,6 +1375,7 @@ const SAVE_AUDIT_REPORT = gql`
 function AuditReport({ result, domain }: { result: AuditResult; domain: string }) {
   const reportRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const { isAuthenticated, user, logout } = useAibizmodAuth();
   const [showSignInModal, setShowSignInModal] = useState(false);
   const savedRef = useRef(false);
@@ -1421,10 +1450,16 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
   const exportPDF = async () => {
     if (!reportRef.current) return;
     setExporting(true);
+    setExportError(null);
     try {
       const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
-      const canvas = await html2canvas(reportRef.current, { scale: 1.5, useCORS: true, backgroundColor: "#ffffff" });
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 1.5,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        ignoreElements: (element) => element.hasAttribute("data-html2canvas-ignore"),
+      });
       const imgData = canvas.toDataURL("image/jpeg", 0.72);
       const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
       const w = pdf.internal.pageSize.getWidth();
@@ -1436,13 +1471,20 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
         pdf.addImage(imgData, "JPEG", 0, -(i * page), w, h);
       }
       pdf.save(`ai-visibility-report-${displayDomain}.pdf`);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("[Aibizmod] Failed to export audit PDF:", e);
+      setExportError("We couldn't create the PDF. Please try again, or use your browser's Print command to save the report as a PDF.");
+    }
     finally { setExporting(false); }
   };
 
   // Citability checks from API result
   const citabilityCategory = result.categoryDetails?.find((c: any) => c.key === "citability");
-  const criticalCount = result.criticalIssues?.filter((i: any) => i.severity === "critical").length ?? 0;
+  const auditIssues = Array.isArray(result.issues) ? result.issues : result.criticalIssues ?? [];
+  const criticalCount = auditIssues.filter((issue: Issue) => issue.severity === "critical").length;
+  const highIssueCount = auditIssues.filter((issue: Issue) => issue.severity === "high").length;
+  const mediumIssueCount = auditIssues.filter((issue: Issue) => issue.severity === "medium").length;
+  const lowIssueCount = auditIssues.filter((issue: Issue) => issue.severity === "low").length;
   const estimatedVisibility = result.score >= 70 ? "High" : result.score >= 45 ? "Moderate" : result.score >= 25 ? "Low" : "Minimal";
   const visColor = result.score >= 70 ? "text-emerald-600" : result.score >= 45 ? "text-amber-600" : "text-red-600";
 
@@ -1456,7 +1498,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
         <div className="relative flex flex-col sm:flex-row items-center gap-4">
           <div className="flex items-center gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {favicon && <img src={favicon} alt={`${displayDomain} favicon`} width={44} height={44} className="w-11 h-11 rounded-xl border border-slate-200 shadow-sm" />}
+            {favicon && <img data-html2canvas-ignore src={favicon} alt={`${displayDomain} favicon`} width={44} height={44} className="w-11 h-11 rounded-xl border border-slate-200 shadow-sm" />}
             <div>
               <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: "Satoshi, sans-serif" }}>{displayDomain}</h1>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -1487,6 +1529,12 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           </div>
         </div>
       </div>
+
+      {exportError && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {exportError}
+        </p>
+      )}
 
       {/* ── Hosted report link ────────────────────────────────────────────── */}
       {hostedReportId && (
@@ -1589,11 +1637,12 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
               label="Critical Issues"
               value={criticalCount}
               color={criticalCount > 0 ? "text-red-600" : "text-emerald-600"}
+              note={`${auditIssues.length} total issues`}
             />
             <StatTile
               icon={<Sparkles className="h-4 w-4 text-amber-500" />}
               label="Recommendations"
-              value={(result.criticalIssues?.length ?? 0) + (result.quickWins?.length ?? 0)}
+              value={auditIssues.length + (result.quickWins?.length ?? 0)}
               color="text-slate-900"
             />
             <StatTile
@@ -1742,19 +1791,24 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── SECTION 7: Critical Issues ─────────────────────────────────────── */}
-      {result.criticalIssues?.length > 0 && (
+      {auditIssues.length > 0 ? (
         <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<AlertTriangle className="h-5 w-5" />}
-            title="Critical Issues"
-            subtitle={`${result.criticalIssues.length} issues identified — click any issue to see the recommended fix and expected score improvement`}
+            title="Issues & Recommendations"
+            subtitle={`${auditIssues.length} issues identified: ${criticalCount} critical, ${highIssueCount} high, ${mediumIssueCount} medium, ${lowIssueCount} low. Click any issue to see the recommended fix and expected score improvement.`}
             iconGradient="from-red-500 to-rose-600"
           />
           <div className="space-y-3">
-            {(result.criticalIssues ?? []).map((issue: any) => (
+            {auditIssues.map((issue: any) => (
               <IssueCard key={issue.id} issue={issue} />
             ))}
           </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800" role="status">
+          <CheckCircle className="h-5 w-5 shrink-0" />
+          No audit issues detected.
         </div>
       )}
 
@@ -1882,15 +1936,9 @@ function AuditReportContent() {
       const urlParam = searchParams.get("url") || searchParams.get("domain");
       const storedDomain = window.sessionStorage.getItem("pending-audit-domain");
       const initialDomain = (urlParam || storedDomain)?.trim();
-      if (initialDomain) {
-        const cached = window.sessionStorage.getItem("audit-cache-" + initialDomain);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && !parsed.error) return parsed;
-        }
-      }
+      if (initialDomain) return readCachedAudit(initialDomain);
     } catch {
-      // Storage error ignored
+      return null;
     }
     return null;
   });
@@ -2025,18 +2073,11 @@ function AuditReportContent() {
     setError(null);
 
     // Check pre-fetched audit result cached by /scanning
-    try {
-      const cached = sessionStorage.getItem("audit-cache-" + cleaned);
-      if (cached) {
-        const cachedData = JSON.parse(cached);
-        if (cachedData && !cachedData.error) {
-          setResult(cachedData);
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch {
-      // Storage error ignored
+    const cachedData = readCachedAudit(cleaned);
+    if (cachedData) {
+      setResult(cachedData);
+      setIsLoading(false);
+      return;
     }
 
     setIsLoading(true);
@@ -2266,7 +2307,7 @@ function AuditReportContent() {
 
         {showResults && (() => {
           const band = BAND_META[result.band] || BAND_META.poor;
-          const criticalCount = Array.isArray(result.criticalIssues) ? result.criticalIssues.filter((i: Issue) => i.severity === "critical" || i.severity === "high").length : 0;
+          const criticalCount = Array.isArray(result.criticalIssues) ? result.criticalIssues.filter((i: Issue) => i.severity === "critical").length : 0;
           const quickWinCount = Array.isArray(result.quickWins) ? result.quickWins.length : 0;
           const platformCount = Array.isArray(result.aiPlatforms) ? result.aiPlatforms.length : 5;
           const faviconUrl = getFaviconUrl(displayDomain || domain);
@@ -2409,7 +2450,7 @@ function AuditReportContent() {
                         <AlertTriangle className="h-4 w-4 text-red-500" />
                       </div>
                       <span className="mt-2 text-2xl font-bold text-slate-900">{criticalCount}</span>
-                      <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Issues</span>
+                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider leading-tight text-center">Critical Issues</span>
                     </div>
 
                     <div className="flex flex-col items-center rounded-2xl border border-slate-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur-sm">

@@ -241,7 +241,7 @@ export default function AuditReportClient({ initialReportId }: { initialReportId
   const displayDomain = result ? formatDomain(report!.domain) : "";
   const favicon = result ? getFaviconUrl(report!.domain) : null;
   const score = typeof report?.score === "number" ? report.score : typeof result?.score === "number" ? result.score : 0;
-  const criticalIssues = result?.criticalIssues ?? [];
+  const criticalIssues = result?.issues ?? result?.criticalIssues ?? [];
   const quickWins = result?.quickWins ?? [];
   const categories = result?.categoryDetails ?? [];
   const platforms = result?.aiPlatforms ?? [];
