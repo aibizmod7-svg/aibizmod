@@ -42,23 +42,23 @@ const VB_W = 1440;
 const VB_H = 900;
 const BASE_SPEED = 0.85;
 
-const DISTURB_SPEED_BOOST = 0.7;
-const TAU_ATTACK = 0.14;
-const TAU_RELEASE = 0.60;
-const MAX_RIPPLES = 6;
+const DISTURB_SPEED_BOOST = 0.9;
+const TAU_ATTACK = 0.11;
+const TAU_RELEASE = 0.65;
+const MAX_RIPPLES = 8;
 const RIPPLE_LIFE = 1.4;
-const RIPPLE_SPEED = 900;
-const RIPPLE_SIGMA = 140;
-const RIPPLE_AMP = 8.5;
+const RIPPLE_SPEED = 950;
+const RIPPLE_SIGMA = 145;
+const RIPPLE_AMP = 11.5;
 
-const STRAND_COLORS = [
-  "#22d3ee", // Cyan 400
-  "#3b82f6", // Blue 500
-  "#0ea5e9", // Sky 500
-  "#0891b2", // Cyan 600
-  "#2563eb", // Blue 600
-  "#06b6d4", // Cyan 500
-  "#1d4ed8", // Blue 700
+const STRAND_GRADIENTS = [
+  { start: "#06B6D4", mid: "#22D3EE", end: "#3B82F6" }, // Cyan 500 -> Cyan 400 (Navbar logo) -> Royal Blue 500
+  { start: "#0891B2", mid: "#06B6D4", end: "#22D3EE" }, // Cyan 600 ("Your Brand" text) -> Cyan 500 -> Cyan 400
+  { start: "#22D3EE", mid: "#0891B2", end: "#3B82F6" }, // Cyan 400 -> Cyan 600 -> Royal Blue 500
+  { start: "#06B6D4", mid: "#0891B2", end: "#06B6D4" }, // Cyan 500 -> Cyan 600 ("Your Brand" text) -> Cyan 500
+  { start: "#3B82F6", mid: "#22D3EE", end: "#0891B2" }, // Royal Blue 500 -> Cyan 400 -> Cyan 600
+  { start: "#0891B2", mid: "#3B82F6", end: "#06B6D4" }, // Cyan 600 -> Royal Blue 500 -> Cyan 500
+  { start: "#22D3EE", mid: "#06B6D4", end: "#3B82F6" }, // Cyan 400 -> Cyan 500 -> Royal Blue 500
 ];
 
 const FALLBACK_TARGET: SearchTarget = {
@@ -149,7 +149,7 @@ function StrandsSVG({ searchTarget, isTyping, ripples, reducedMotion }: StrandsS
           const t = smoothstep(0, sLeft, x);
           y = baseRow + (cy - baseRow) * t;
           const swayFade = 1 - t;
-          y += Math.sin(phase * 1.5 - x * 0.008 + i * 0.7) * (14 + 7 * disturb) * swayFade;
+          y += Math.sin(phase * 1.5 - x * 0.008 + i * 0.7) * (14 + 9.5 * disturb) * swayFade;
 
           // Ripples
           for (const rip of ripples.current) {
@@ -166,7 +166,7 @@ function StrandsSVG({ searchTarget, isTyping, ripples, reducedMotion }: StrandsS
         } else if (x >= sRight) {
           const t = smoothstep(sRight, VB_W, x);
           y = cy + (baseRow - cy) * t;
-          y += Math.sin(phase * 1.5 + x * 0.008 + i * 0.7) * (14 + 7 * disturb) * t;
+          y += Math.sin(phase * 1.5 + x * 0.008 + i * 0.7) * (14 + 9.5 * disturb) * t;
 
           // Ripples
           for (const rip of ripples.current) {
@@ -185,9 +185,9 @@ function StrandsSVG({ searchTarget, isTyping, ripples, reducedMotion }: StrandsS
           const env = Math.sin(u * Math.PI);
 
           const breathe = 0.15 + 0.85 * (0.5 + 0.5 * Math.sin(phase * 1.3));
-          const braidAmp = VB_H * 0.064 * (breathe + disturb * 0.44) * env;
+          const braidAmp = VB_H * 0.064 * (breathe + disturb * 0.50) * env;
 
-          const harmonic = Math.sin(phase2 + u * 8 * Math.PI) * env * (0.22 + 0.28 * disturb);
+          const harmonic = Math.sin(phase2 + u * 8 * Math.PI) * env * (0.22 + 0.35 * disturb);
           let yBraid   = Math.sin(phase  + u * 4 * Math.PI) + harmonic;
           if (yBraid < 0) {
             yBraid *= 0.73;
@@ -291,12 +291,13 @@ function StrandsSVG({ searchTarget, isTyping, ripples, reducedMotion }: StrandsS
           </feMerge>
         </filter>
 
-        {STRAND_COLORS.map((color, i) => (
+        {STRAND_GRADIENTS.map((grad, i) => (
           <linearGradient key={i} id={`strand-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor={color} stopOpacity="0" />
-            <stop offset="15%"  stopColor={color} stopOpacity="1" />
-            <stop offset="85%"  stopColor={color} stopOpacity="1" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
+            <stop offset="0%"   stopColor={grad.start} stopOpacity="0" />
+            <stop offset="15%"  stopColor={grad.start} stopOpacity="1" />
+            <stop offset="50%"  stopColor={grad.mid}   stopOpacity="1" />
+            <stop offset="85%"  stopColor={grad.end}   stopOpacity="1" />
+            <stop offset="100%" stopColor={grad.end}   stopOpacity="0" />
           </linearGradient>
         ))}
       </defs>
@@ -307,7 +308,7 @@ function StrandsSVG({ searchTarget, isTyping, ripples, reducedMotion }: StrandsS
             key={i}
             ref={(el) => { pathRefs.current[i] = el; }}
             stroke={`url(#strand-${i})`}
-            strokeWidth={isTyping ? 1.4 : 1.15}
+            strokeWidth={isTyping ? 1.35 : 1.15}
             strokeLinecap="round"
             fill="none"
             d=""
@@ -372,6 +373,7 @@ const SERVICES = [
   "Hosting & Infrastructure",
   "Customer Experience",
   "IT Consulting",
+  "Microsoft Stack & Copilot",
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -519,13 +521,70 @@ export function Hero() {
     }
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const scanEnergyRef = useRef(0);
+
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const targetDomain = domain.trim();
-    if (!targetDomain) return;
+    if (!targetDomain || isSubmitting) return;
 
-    window.sessionStorage.setItem("pending-audit-domain", targetDomain);
-    router.push("/ai-visibility-audit-report");
+    setIsSubmitting(true);
+
+    // 1. Measure search form rect & store in sessionStorage for scanning page entrance
+    try {
+      if (formRef.current) {
+        const r = formRef.current.getBoundingClientRect();
+        sessionStorage.setItem(
+          "strand-handoff",
+          JSON.stringify({
+            cx: r.left + r.width / 2,
+            cy: r.top + r.height / 2,
+            w: r.width,
+            t: Date.now(),
+          })
+        );
+      }
+    } catch {
+      // Storage failure degrades to plain centered entrance
+    }
+
+    try {
+      sessionStorage.setItem("pending-audit-domain", targetDomain);
+    } catch {
+      // Storage failure ignored
+    }
+
+    // 2. Dispatch ripple bursts at 0, 120, 260, 420ms
+    const dispatchRipple = () => {
+      const now = performance.now() / 1000;
+      if (ripples.current.length >= MAX_RIPPLES) ripples.current.shift();
+      ripples.current.push({ t0: now, life: RIPPLE_LIFE });
+    };
+
+    dispatchRipple(); // 0ms
+    setTimeout(dispatchRipple, 120);
+    setTimeout(dispatchRipple, 260);
+    setTimeout(dispatchRipple, 420);
+
+    // 3. Scan energy ramp (0 -> 1100ms) with easeOutCubic
+    const startTime = performance.now();
+    const rampEnergy = (timestamp: number) => {
+      const elapsed = timestamp - startTime;
+      const p = Math.min(1, elapsed / 1100);
+      const eased = 1 - Math.pow(1 - p, 3);
+      scanEnergyRef.current = eased;
+
+      if (p < 1) {
+        requestAnimationFrame(rampEnergy);
+      }
+    };
+    requestAnimationFrame(rampEnergy);
+
+    // 4. Navigate at 1050ms while dissolve finishes
+    setTimeout(() => {
+      router.push(`/scanning?url=${encodeURIComponent(targetDomain)}`);
+    }, 1050);
   };
 
   const rippleRequestId = useRef(0);
@@ -546,7 +605,7 @@ export function Hero() {
         }}
       />
 
-      {/* Animated strands SVG */}
+      {/* Animated strands SVG (carries visual continuity) */}
       <StrandsSVG
         searchTarget={searchTarget}
         isTyping={isTyping}
@@ -555,8 +614,16 @@ export function Hero() {
         reducedMotion={reducedMotion}
       />
 
-      {/* Content */}
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-6 pb-20 text-center" style={{ paddingTop: "calc(68px)" }}>
+      {/* Content dissolve */}
+      <div
+        className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-6 pb-20 text-center transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={{
+          paddingTop: "calc(68px)",
+          opacity: isSubmitting ? 0 : 1,
+          transform: isSubmitting ? "translateY(-10px)" : "translateY(0px)",
+          filter: isSubmitting ? "blur(6px)" : "blur(0px)",
+        }}
+      >
         <div className="w-full max-w-6xl">
 
           {/* 1. Main Heading (Rotating Service Ticker in 2 Lines) */}

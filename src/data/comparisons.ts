@@ -14,9 +14,11 @@ export interface ComparisonPage {
   optionA: string;
   optionB: string;
   summary: string;
+  answerBlock: string;
   table: ComparisonRow[];
   decisionRules: { scenario: string; recommendation: string }[];
   limitations: string[];
+  faqs: { q: string; a: string }[];
   sources: { label: string; url: string }[];
   relatedServices: { name: string; href: string }[];
 }
@@ -32,7 +34,8 @@ export const comparisons: ComparisonPage[] = [
     optionA: 'Custom Software',
     optionB: 'SaaS / Off-the-Shelf',
     summary:
-      'Custom software gives you full control over features, data, and roadmap but requires upfront investment and ongoing maintenance. SaaS offers faster deployment and predictable pricing but limits customisation and creates data dependency on the vendor. The right choice depends on how unique your processes are and whether you need the software as a competitive differentiator.',
+      'Custom software gives you full control over features, data, and roadmap but requires upfront investment and ongoing maintenance. SaaS offers faster deployment and predictable pricing but limits customisation and creates data dependency on the vendor. The right choice depends on how unique your processes are and whether you need the software as a competitive differentiator. aibizmod builds custom software for businesses that have outgrown off-the-shelf tools — we scope, build, and maintain the system so your team can focus on the work it powers.',
+    answerBlock: 'Custom software gives you full control over features, data, and roadmap but requires upfront investment. SaaS offers faster deployment and predictable pricing but limits customisation. aibizmod builds custom software for businesses that have outgrown off-the-shelf tools.',
     table: [
       { feature: 'Time to launch', optionA: '3–9 months', optionB: 'Days to weeks' },
       { feature: 'Upfront cost', optionA: '£20k–£150k+', optionB: 'Monthly subscription (£10–£500/user)' },
@@ -58,6 +61,12 @@ export const comparisons: ComparisonPage[] = [
       'A poorly scoped custom project can exceed budget if requirements are not clearly defined upfront.',
       'Some SaaS tools offer genuinely excellent functionality that would be expensive to replicate — always evaluate before deciding to build.',
     ],
+    faqs: [
+      { q: 'When should a business choose custom software over SaaS?', a: 'When your core processes are unique and give you a competitive advantage, when you need full data control for compliance, or when per-user SaaS pricing becomes more expensive than building at scale.' },
+      { q: 'How much does custom software cost compared to SaaS?', a: 'Custom software typically costs £20k–£150k+ upfront with ongoing maintenance. SaaS costs £10–£500 per user per month. At scale, custom can become cheaper if per-user pricing grows faster than infrastructure costs.' },
+      { q: 'Can aibizmod help us decide between building and buying?', a: 'Yes. aibizmod\'s IT consulting team evaluates your processes, compliance requirements, and growth trajectory to recommend whether custom development or SaaS is the right fit — then builds or implements the chosen approach.' },
+      { q: 'What if we already use SaaS but need more control?', a: 'aibizmod can build custom integrations, middleware, or full replacements for SaaS tools that no longer fit. We scope the migration, build the system, and handle the transition from vendor dependency to owned software.' },
+    ],
     sources: [
       { label: 'NIST Guide to the Software Life Cycle', url: 'https://csrc.nist.gov/publications/detail/sp/800-64/rev-2/final' },
       { label: 'AWS Cloud Economics Centre — build vs buy analysis', url: 'https://aws.amazon.com/economics/' },
@@ -69,45 +78,56 @@ export const comparisons: ComparisonPage[] = [
   },
   {
     slug: 'native-vs-cross-platform-apps',
-    title: 'Native vs Cross-Platform Apps: Which Approach Fits Your Project?',
-    excerpt: 'Should you build native iOS and Android apps separately or use a cross-platform framework like Flutter or React Native? Compare performance, cost, and maintenance.',
+    title: 'Native vs Cross-Platform Apps: Which Architecture Fits Your Mobile Strategy?',
+    excerpt: 'Compare native iOS (Swift) and Android (Kotlin) development against cross-platform frameworks (Flutter & React Native) on cost, time to market, performance, and long-term maintenance.',
     image: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&q=80&auto=format&fit=crop',
     imageAlt: 'Comparison of native mobile app development versus cross-platform frameworks like Flutter and React Native.',
     date: '2026-07-01',
-    optionA: 'Native Apps',
+    optionA: 'Native Apps (Swift / Kotlin)',
     optionB: 'Cross-Platform (Flutter / React Native)',
     summary:
-      'Native apps deliver the best platform-specific performance and access to the latest device features but require separate codebases for iOS and Android. Cross-platform frameworks let you share most code between platforms, reducing development time and cost, but can lag behind new OS features and may require native modules for platform-specific functionality.',
+      'Selecting between native development (Swift/Kotlin) and cross-platform frameworks (Flutter/React Native) comes down to your product\'s performance needs, hardware dependencies, budget, and launch timeline. Native apps deliver maximum hardware performance and 100% platform UX compliance for graphics-intensive or hardware-bound applications. Cross-platform apps allow businesses to launch simultaneously on iOS and Android from a single shared codebase — reducing initial build costs by 40–50% and simplifying long-term maintenance. aibizmod builds both — we recommend the architecture that fits your product, not the one that fits our toolchain.',
+    answerBlock: 'Native apps (Swift/Kotlin) deliver maximum performance and hardware access. Cross-platform apps (Flutter/React Native) launch on both platforms from one codebase at 40–50% lower cost. aibizmod builds both and recommends the architecture that fits your product.',
     table: [
-      { feature: 'Code reuse across platforms', optionA: 'None — separate iOS (Swift) and Android (Kotlin) codebases', optionB: '80–95% shared code; platform-specific code for native features' },
-      { feature: 'Performance', optionA: 'Best — direct use of platform APIs and hardware', optionB: 'Near-native for most use cases; may lag for animation-heavy or GPU-intensive apps' },
-      { feature: 'Development cost', optionA: '2x (two separate teams or sequential builds)', optionB: '~1.3–1.5x a single platform, depending on native module needs' },
-      { feature: 'Time to market', optionA: 'Build and launch each platform sequentially', optionB: 'Both platforms can launch together' },
-      { feature: 'Access to new OS features', optionA: 'Immediate — available on release day', optionB: 'Delayed — framework team must add support first' },
-      { feature: 'UI look and feel', optionA: 'Native platform components; users expect the experience', optionB: 'Custom rendered; can mimic but not perfectly match platform conventions' },
-      { feature: 'Third-party library support', optionA: 'Extensive — mature ecosystems for both platforms', optionB: 'Growing — most popular libraries available; niche ones may need native wrappers' },
-      { feature: 'Maintenance', optionA: 'Two codebases to update for OS changes', optionB: 'One codebase; framework handles OS compatibility' },
-      { feature: 'App Store and Google Play compliance', optionA: 'Managed per platform', optionB: 'Shared logic; platform-specific review for native modules' },
+      { feature: 'Code reuse & architecture', optionA: '0% — Separate Swift (iOS) & Kotlin (Android) codebases', optionB: '80–95% shared logic (Flutter/React Native); native bridges for hardware' },
+      { feature: 'Development & maintenance cost', optionA: 'High — Requires separate iOS and Android development effort (~1.8–2x)', optionB: 'Optimised — Single codebase reduces initial build & update costs by 40–50%' },
+      { feature: 'Time to market', optionA: 'Sequential or dual-team build (Typically 4–6 months per platform)', optionB: 'Simultaneous launch for iOS and Android (Typically 2–3 months)' },
+      { feature: 'Performance & frame rate', optionA: 'Maximum — Direct hardware access, 120fps fluid UI, zero abstraction latency', optionB: 'Near-Native — Smooth 60fps for standard UI; minor overhead on heavy GPU tasks' },
+      { feature: 'Access to hardware & OS APIs', optionA: 'Immediate zero-day access to ARKit, HealthKit, NFC, & new OS features', optionB: 'Plugin-dependent; custom native module bridges required for niche APIs' },
+      { feature: 'User experience & platform UX', optionA: '100% native interaction models, gestures, and system font conventions', optionB: 'Unified visual design with platform-adaptive navigation and components' },
+      { feature: 'Store submission & release', optionA: 'Managed separately across Apple App Store Connect & Google Play Console', optionB: 'Single release pipeline managing parallel deployments to both stores' },
+      { feature: 'Long-term maintenance', optionA: 'Two distinct codebases to update for annual OS version releases', optionB: 'Single codebase updates; framework maintains baseline OS compatibility' },
+      { feature: 'Offline & data sync capabilities', optionA: 'Direct SQLite / Room / CoreData setup with custom background sync', optionB: 'WatermelonDB / SQLite plugins with background task queueing' },
+      { feature: 'Ideal project scope', optionA: 'High-GPU apps, AR/VR, complex IoT/Bluetooth, or platform-exclusive apps', optionB: 'SaaS companion apps, e-commerce, booking tools, & enterprise field portals' },
     ],
     decisionRules: [
-      { scenario: 'Your app relies on heavy animations, AR, or real-time video processing', recommendation: 'Native — you need direct access to GPU and platform rendering pipelines.' },
-      { scenario: 'You need to launch on both platforms with a limited budget', recommendation: 'Cross-platform — Flutter or React Native will get you to market faster with one team.' },
-      { scenario: 'Your app is a simple data-entry or list-and-detail interface', recommendation: 'Cross-platform — the performance difference is negligible for standard UI patterns.' },
-      { scenario: 'You want to be first to market with a new OS feature like Apple Vision Pro APIs', recommendation: 'Native — cross-platform frameworks will not support new platform APIs for months.' },
-      { scenario: 'You have separate iOS and Android teams already', recommendation: 'Native — using their existing skills avoids the cross-platform learning curve.' },
+      { scenario: 'Your product relies on real-time AR, high-frame-rate rendering, or platform-exclusive APIs (ARKit/HealthKit)', recommendation: 'Choose Native — Swift and Kotlin give you direct access to GPU pipelines and platform hardware without abstraction bottlenecks.' },
+      { scenario: 'You need to launch on both iOS and Android simultaneously with a fixed timeline and budget', recommendation: 'Choose Cross-Platform — Flutter or React Native allows a single team to ship both stores in 40–50% less time.' },
+      { scenario: 'Your application is an enterprise portal, booking system, field service dispatch, or e-commerce tool', recommendation: 'Choose Cross-Platform — Performance is indistinguishable from native for standard UI and data workflows, saving ongoing maintenance costs.' },
+      { scenario: 'You need zero-day support for major OS updates or emerging hardware features', recommendation: 'Choose Native — Framework bridges can lag behind major OS feature launches by weeks or months.' },
+      { scenario: 'Your existing team has strong React / TypeScript or Dart expertise', recommendation: 'Choose Cross-Platform — Leveraging existing frontend engineering skills eliminates the native learning curve.' },
     ],
     limitations: [
-      'Cross-platform apps can feel slightly less responsive than native, especially on low-end devices or complex screens.',
-      'Native development costs roughly double but gives you full platform flexibility and the best possible user experience.',
-      'Flutter and React Native are mature but their ecosystems are smaller than native SDKs — some niche features require custom native module development.',
-      'If you plan to add platform-specific features later, starting cross-platform may require significant refactoring.',
+      'Cross-platform frameworks add a light runtime abstraction layer that can add slight memory overhead on low-end legacy devices during complex animations.',
+      'Native mobile development costs roughly double to build and maintain due to twin codebases, but ensures zero compromises on platform hardware features.',
+      'Niche hardware features (e.g., specific Bluetooth LE protocols or thermal imaging sensors) may require custom native module development even within cross-platform projects.',
+      'Switching from cross-platform to native later is an architectural rebuild, so evaluating your 3-year hardware roadmap upfront is essential.',
+    ],
+    faqs: [
+      { q: 'How much cheaper is cross-platform compared to native?', a: 'Cross-platform reduces initial build costs by 40–50% because one codebase serves both iOS and Android. Native requires separate Swift and Kotlin teams, roughly doubling development and maintenance costs.' },
+      { q: 'When should I choose native over cross-platform?', a: 'Choose native when your app relies on real-time AR, high-frame-rate rendering, platform-exclusive APIs (ARKit, HealthKit), or needs zero-day support for major OS updates.' },
+      { q: 'Does aibizmod build both native and cross-platform apps?', a: 'Yes. aibizmod\'s mobile app development team works with Swift, Kotlin, Flutter, and React Native. We recommend the architecture based on your product requirements, not a single framework preference.' },
+      { q: 'Can we start cross-platform and switch to native later?', a: 'It is possible but costly — switching is essentially an architectural rebuild. aibizmod helps you evaluate your 3-year hardware roadmap upfront so you choose the right architecture from the start.' },
     ],
     sources: [
-      { label: 'Flutter documentation — platform-specific code', url: 'https://docs.flutter.dev/platform-integration' },
-      { label: 'React Native documentation — native modules', url: 'https://reactnative.dev/docs/native-modules-setup' },
+      { label: 'Flutter Documentation — Platform Integration', url: 'https://docs.flutter.dev/platform-integration' },
+      { label: 'React Native Documentation — Architecture & Native Modules', url: 'https://reactnative.dev/architecture/overview' },
+      { label: 'Apple Developer Documentation — iOS SDK', url: 'https://developer.apple.com/documentation/' },
+      { label: 'Android Developers — Core Libraries & Jetpack', url: 'https://developer.android.com/guide' },
     ],
     relatedServices: [
       { name: 'Mobile App Development', href: '/services/mobile-app-development' },
+      { name: 'Native App Development', href: '/services/mobile-app-development/native-apps' },
       { name: 'Cross-Platform Apps', href: '/services/mobile-app-development/cross-platform-apps' },
     ],
   },
@@ -121,7 +141,8 @@ export const comparisons: ComparisonPage[] = [
     optionA: 'Automation Platform (Zapier / Make / n8n)',
     optionB: 'Custom Workflow (Python / Node.js / Scripts)',
     summary:
-      'Automation platforms let you connect tools quickly with visual interfaces and pre-built connectors, ideal for standard integrations. Custom workflows give you complete control over logic, error handling, and data transformation, but require development effort. The choice depends on the complexity of your integration and whether off-the-shelf connectors serve your use case.',
+      'Automation platforms let you connect tools quickly with visual interfaces and pre-built connectors, ideal for standard integrations. Custom workflows give you complete control over logic, error handling, and data transformation, but require development effort. The choice depends on the complexity of your integration and whether off-the-shelf connectors serve your use case. aibizmod builds both — we configure platforms where they fit and write custom workflows where they do not.',
+    answerBlock: 'Automation platforms (Zapier, Make, n8n) connect tools quickly with visual builders. Custom workflows (Python, Node.js) give full control over logic and data. aibizmod configures platforms where they fit and builds custom workflows where they do not.',
     table: [
       { feature: 'Setup time', optionA: 'Hours to days — visual builder drag-and-drop', optionB: 'Days to weeks — requires coding and testing' },
       { feature: 'Pre-built connectors', optionA: '1,000+ for common SaaS tools', optionB: 'None — you integrate each API from scratch' },
@@ -147,6 +168,12 @@ export const comparisons: ComparisonPage[] = [
       'Custom workflows require documentation and handover so your team can maintain them after the developer moves on — factor this into your budget.',
       'Platform connectors break when the underlying API changes — you are dependent on the platform team to update their integration.',
     ],
+    faqs: [
+      { q: 'When should I use Zapier or Make instead of custom code?', a: 'When you need to connect two common SaaS tools with standard data mapping and the workflow runs fewer than 10,000 operations per month. Platforms handle this in hours, not weeks.' },
+      { q: 'At what scale does custom automation become cheaper?', a: 'Above 10,000 operations per month, platform per-task pricing typically exceeds infrastructure costs for self-hosted solutions. Custom workflows also become cheaper when you need complex conditional logic or data transformation.' },
+      { q: 'Does aibizmod configure automation platforms or only build custom?', a: 'Both. aibizmod configures n8n, Zapier, and Make where they fit, and builds custom Python or Node.js workflows where platforms hit limitations. We recommend the approach that fits your complexity and scale.' },
+      { q: 'What about data residency concerns with hosted platforms?', a: 'Hosted platforms process data through their servers. If data residency matters, aibizmod can deploy self-hosted n8n or build custom scripts that keep data on your own infrastructure.' },
+    ],
     sources: [
       { label: 'n8n documentation — self-hosting and node development', url: 'https://docs.n8n.io/' },
       { label: 'Zapier pricing and task limits', url: 'https://zapier.com/pricing' },
@@ -166,7 +193,8 @@ export const comparisons: ComparisonPage[] = [
     optionA: 'Full Website Redesign',
     optionB: 'Incremental Improvements',
     summary:
-      'A full redesign gives you a clean architectural foundation, modern design, and the chance to fix accumulated technical debt — but it is expensive, risky for SEO, and takes months. Incremental improvements let you address specific issues (page speed, conversion rate, mobile UX) one at a time with lower risk and faster ROI, but you remain constrained by the existing architecture and content structure.',
+      'A full redesign gives you a clean architectural foundation, modern design, and the chance to fix accumulated technical debt — but it is expensive, risky for SEO, and takes months. Incremental improvements let you address specific issues (page speed, conversion rate, mobile UX) one at a time with lower risk and faster ROI, but you remain constrained by the existing architecture and content structure. aibizmod advises on both approaches and executes the one that matches your budget, timeline, and risk tolerance.',
+    answerBlock: 'A full redesign gives you a clean foundation but is expensive and risky for SEO. Incremental improvements deliver faster ROI with lower risk but are constrained by existing architecture. aibizmod advises on both and executes the approach that fits your situation.',
     table: [
       { feature: 'Timeline', optionA: '3–6 months from kickoff to launch', optionB: '2–6 weeks per improvement cycle' },
       { feature: 'Upfront cost', optionA: '£15k–£80k+ depending on scope and pages', optionB: '£2k–£10k per improvement project' },
@@ -192,6 +220,12 @@ export const comparisons: ComparisonPage[] = [
       'The best approach is often a hybrid: fix critical performance and conversion issues incrementally while planning a phased modernisation of the architecture.',
       'Always run an SEO audit before any redesign — migrating URLs without proper redirects can lose years of accumulated ranking authority.',
     ],
+    faqs: [
+      { q: 'How do I know if my website needs a full redesign?', a: 'When your platform cannot support the features you need, when your brand has changed and the design no longer represents your business, or when accumulated technical debt makes incremental improvements ineffective.' },
+      { q: 'What is the SEO risk of a full redesign?', a: 'High. URL changes, content migration, and structural shifts can cause ranking fluctuations. Always run an SEO audit before redesigning and implement proper 301 redirects for every changed URL.' },
+      { q: 'Can aibizmod help us decide between redesign and improvement?', a: 'Yes. aibizmod\'s web development team evaluates your platform limitations, Core Web Vitals scores, conversion data, and business goals to recommend whether incremental fixes or a full rebuild delivers better ROI.' },
+      { q: 'What is the hybrid approach?', a: 'Fix critical performance and conversion issues incrementally while planning a phased modernisation of the architecture. This minimises risk and delivers measurable gains during the rebuild period.' },
+    ],
     sources: [
       { label: 'Google — Core Web Vitals', url: 'https://web.dev/vitals/' },
       { label: 'Smashing Magazine — Website Redesign Guide', url: 'https://www.smashingmagazine.com/website-redesign/' },
@@ -213,13 +247,14 @@ export const comparisons: ComparisonPage[] = [
     optionB: 'LLMClicks.ai (SaaS Tool)',
     summary:
       'LLMClicks.ai is a well-built AI visibility tracker that monitors brand mentions across ChatGPT, Perplexity, Gemini, and Copilot — but a tracker only tells you where you are missing; someone still has to interpret the data and implement the fixes. aibizmod\'s AI Visibility Audit service delivers the same visibility benchmarking as part of a complete programme: the audit, the citation gap analysis, the page-level fixes, and the 90-day roadmap are all done for you by a technical team. If you have in-house SEO expertise and want a continuous self-serve scorecard, the tool is a good buy. If you want visibility measured and then actually improved, services usually close the gap faster.',
+    answerBlock: 'LLMClicks.ai tracks brand mentions across ChatGPT, Perplexity, Gemini, and Copilot, but interpreting the data and implementing fixes still falls to your team. aibizmod\'s AI Visibility Audit delivers the same benchmarking plus page-level fixes, schema updates, and a 90-day roadmap — all executed by one technical team.',
     table: [
       { feature: 'What you get', optionA: 'Benchmark, citation gap analysis, site readiness review, and a 90-day fix roadmap — delivered', optionB: 'A self-serve dashboard: visibility score, queries, audits, and benchmarks' },
       { feature: 'Who does the work', optionA: 'Our team runs the audit and implements the fixes', optionB: 'Your team must interpret dashboards and make changes themselves' },
       { feature: 'Audit depth', optionA: 'Prompt mapping, entity recognition, schema review, content and authority analysis combined', optionB: '120-point page audit focused on on-page AI-readiness factors' },
       { feature: 'Implementation', optionA: 'Included — page restructuring, schema, content, and internal linking changes', optionB: 'Not included — the tool generates recommendations you execute' },
       { feature: 'Monitoring cadence', optionA: 'Monthly scorecard delivered to you as part of the engagement', optionB: 'Continuous automated tracking (queries, alerts, benchmarks)' },
-      { feature: 'Cost model', optionA: 'Project or retainer based on scope — fixed, no per-query limits', optionB: 'Subscription: $49–$199/month for 500–6,000 queries' },
+      { feature: 'Cost model', optionA: 'Project or retainer based on scope — fixed, no per-query limits', optionB: 'Subscription: $49–$199/mo (Starter/Pro/Agency) plus $159–$499 one-time lifetime tiers' },
       { feature: 'Time to first fixes', optionA: 'Days — fixes start in the first sprint after the audit', optionB: 'Weeks — you need to work through recommendations yourself' },
       { feature: 'Expertise required from you', optionA: 'None — we bring the technical and SEO expertise', optionB: 'High — in-house SEO knowledge needed to act on the data' },
       { feature: 'White-label reporting', optionA: 'Available for agencies buying our audit as a service', optionB: 'Included on the $199/month Agency plan' },
@@ -236,6 +271,12 @@ export const comparisons: ComparisonPage[] = [
       'A services engagement costs more upfront than a subscription, because it includes implementation work rather than just data.',
       'Audit-based services give you a point-in-time picture; if you need daily tracking forever, a tool subscription is the cheaper long-term option.',
       'Whatever you choose, the fixes matter more than the measurement — no dashboard improves visibility by itself.',
+    ],
+    faqs: [
+      { q: 'What does LMClicks.ai actually track?', a: 'LLMClicks monitors brand mentions and citations across ChatGPT, Perplexity, Gemini, and Copilot. It provides visibility scores, query tracking, and audit reports showing where your brand appears or is missing in AI-generated answers.' },
+      { q: 'Can I use LLMClicks.ai and aibizmod together?', a: 'Yes. Many agencies buy LLMClicks for continuous monitoring while using aibizmod to run the audit and implementation. The tool tracks; the service fixes.' },
+      { q: 'How is aibizmod\'s audit different from a LLMClicks dashboard?', a: 'LLMClicks gives you data and recommendations. aibizmod delivers the same visibility data plus hands-on implementation — page restructuring, schema updates, content changes, and a 90-day roadmap executed by our team.' },
+      { q: 'Which is better for a small business without an SEO team?', a: 'aibizmod. The audit service requires no in-house expertise — we diagnose, fix, and report. LLMClicks needs someone on your team to interpret dashboards and make changes.' },
     ],
     sources: [
       { label: 'LLMClicks.ai — pricing and plans', url: 'https://llmclicks.ai/pricing' },
@@ -258,13 +299,14 @@ export const comparisons: ComparisonPage[] = [
     optionB: 'Otterly.ai (SaaS Platform)',
     summary:
       'Otterly.ai is a respected AI search monitoring platform — G2-rated 4.8/5 — with prompt research, analytics, and optimization features plus free GEO tools. It is a strong option for teams that want to run their own monitoring. What it does not do is fix your site for you: the prompts, dashboards, and reports still need an expert to translate into page changes, schema, and content updates. The aibizmod alternative packages the measurement with the implementation — the audit, the fixes, and the follow-up scorecard are handled by one technical team, which is why businesses without a dedicated SEO lead usually see results sooner.',
+    answerBlock: 'Otterly.ai is a G2-rated AI search monitoring platform with prompt research, analytics, and free GEO tools — but it does not fix your site. aibizmod packages the same visibility measurement with hands-on implementation: audit, page fixes, schema updates, and a monthly scorecard delivered by one team.',
     table: [
       { feature: 'What you get', optionA: 'Managed audit: benchmark, citation gaps, fixes, and monthly scorecard', optionB: 'Self-serve platform: prompt research, AI search analytics, monitoring' },
       { feature: 'Who does the work', optionA: 'Our technical team — audit, implementation, and reporting', optionB: 'Your team — you configure prompts and act on the analytics' },
       { feature: 'Free tools', optionA: 'Free AI Visibility Audit Report and GEO audit API on our site', optionB: 'Free GEO tools and an "Optimize for AI Search" guide' },
       { feature: 'Prompt research', optionA: 'Prompt map built for your industry as part of the audit', optionB: 'Platform feature — research prompts across models and countries' },
       { feature: 'Optimization', optionA: 'Implemented — page structure, schema, content, and linking changes', optionB: 'Recommended — the platform flags issues, you fix them' },
-      { feature: 'Cost model', optionA: 'Fixed project or retainer, no per-query or seat pricing', optionB: 'Subscription pricing with free trial and demo' },
+      { feature: 'Cost model', optionA: 'Fixed project or retainer, no per-query or seat pricing', optionB: 'Subscription: Lite $29/mo (15 prompts), Standard $189/mo (100 prompts), Premium $489/mo (400 prompts) + add-ons' },
       { feature: 'Expertise required', optionA: 'None on your side', optionB: 'SEO and GEO expertise needed to act on the data' },
       { feature: 'Best for', optionA: 'Teams that want visibility improved, not just tracked', optionB: 'In-house teams and agencies that want their own monitoring platform' },
     ],
@@ -279,6 +321,12 @@ export const comparisons: ComparisonPage[] = [
       'A managed audit is a point-in-time programme; continuous daily monitoring is where a platform still wins.',
       'If your team is small, paying for both a platform subscription and staff time to interpret it can cost more than a services engagement.',
       'Be clear on the goal: measuring visibility and improving it are different jobs — the wrong choice spends money on one without achieving the other.',
+    ],
+    faqs: [
+      { q: 'What does Otterly.ai monitor?', a: 'Otterly tracks AI-generated answers across ChatGPT, Perplexity, Gemini, and Copilot. It provides prompt research, analytics dashboards, and optimization features to help you understand where your brand appears in AI search results.' },
+      { q: 'Does Otterly.ai fix my website for me?', a: 'No. Otterly is a monitoring platform — it surfaces data and recommendations. You still need an SEO team or agency to implement page changes, schema updates, and content improvements.' },
+      { q: 'How does aibizmod compare to Otterly.ai for small teams?', a: 'aibizmod delivers the measurement and the implementation as one service. Small teams without a dedicated SEO lead get results faster because the audit, fixes, and scorecard are handled by our technical team.' },
+      { q: 'Can I use Otterly.ai for continuous monitoring after an aibizmod audit?', a: 'Yes. Some clients use a platform for ongoing daily tracking after completing an aibizmod audit and implementation programme. The two approaches complement each other.' },
     ],
     sources: [
       { label: 'Otterly.ai — AI search monitoring platform', url: 'https://otterly.ai/' },
@@ -301,13 +349,14 @@ export const comparisons: ComparisonPage[] = [
     optionB: 'Peec AI (SaaS Platform)',
     summary:
       'Peec AI is an AI search analytics platform aimed at marketing teams: tagged prompts, country-level tracking, brand benchmarking, and source analysis that even surfaces PR recommendations from sites like G2 and Reddit. It is excellent for teams that already run GEO programmes and need better data. The catch is the same as every analytics tool: insights without implementation do not move the needle. aibizmod\'s audit service covers the measurement side — prompt mapping, citation gaps, competitor benchmarking — and then goes further by implementing the fixes and reporting the follow-up scorecard.',
+    answerBlock: 'Peec AI provides tagged prompts, country-level tracking, brand benchmarking, and PR source insights for marketing teams running GEO programmes. aibizmod covers the same measurement — prompt mapping, citation gaps, competitor benchmarking — and implements the fixes with a follow-up scorecard.',
     table: [
       { feature: 'What you get', optionA: 'Managed audit and implementation with a follow-up scorecard', optionB: 'Analytics platform: prompt tracking, benchmarks, source and PR insights' },
       { feature: 'Who does the work', optionA: 'Our team runs prompts, analyses sources, and implements fixes', optionB: 'Your marketing team configures and interprets the analytics' },
       { feature: 'Source analysis', optionA: 'Citation source mapping with fix recommendations for your content', optionB: 'Source tracking with PR recommendations (G2, LinkedIn, Reddit, editorial)' },
       { feature: 'Brand benchmarking', optionA: 'Included against your chosen competitors in the audit', optionB: 'Platform feature — benchmark across brands and countries' },
       { feature: 'Implementation', optionA: 'Included — content, schema, and authority fixes', optionB: 'Not included — recommendations only' },
-      { feature: 'Cost model', optionA: 'Fixed project or retainer', optionB: 'Subscription with demo and free trial' },
+      { feature: 'Cost model', optionA: 'Fixed project or retainer with full implementation', optionB: 'Subscription: Starter ~$89/mo (25 prompts), Pro $199/mo, Agency tiers $245–$795/mo' },
       { feature: 'Best for', optionA: 'Businesses without dedicated AI search analytics staff', optionB: 'Marketing teams that want self-serve analytics and PR source insights' },
     ],
     decisionRules: [
@@ -321,6 +370,12 @@ export const comparisons: ComparisonPage[] = [
       'Analytics platforms assume someone will act on the data; without an SEO lead, subscriptions can quietly become unused spend.',
       'A managed programme gives you deep, snapshot visibility rather than continuous per-country tracking.',
       'The right answer for most businesses is a blend: use a platform if you have the team, or outsource the whole programme if you do not.',
+    ],
+    faqs: [
+      { q: 'What makes Peec AI different from other AI search trackers?', a: 'Peec AI adds country-level tracking, source analysis, and PR recommendations — it tells you not just where you appear, but which sites (G2, Reddit, editorial) are citing you and how to get more mentions from those sources.' },
+      { q: 'Do I need an SEO team to use Peec AI?', a: 'Yes. Peec AI is an analytics platform — it surfaces insights and PR recommendations, but someone on your team needs to act on them. Without an SEO lead, the data may go unused.' },
+      { q: 'How does aibizmod handle the source analysis Peec provides?', a: 'aibizmod\'s audit includes citation source mapping with fix recommendations. We identify which sources cite competitors but not you, then implement content and outreach changes to close those gaps.' },
+      { q: 'Which is better for a marketing team that already runs GEO content?', a: 'Peec AI — its analytics depth, especially source and PR insights, is genuinely differentiated for teams already operating in this space. aibizmod is better for teams that want someone to run the whole programme.' },
     ],
     sources: [
       { label: 'Peec AI — AI search analytics for marketing teams', url: 'https://peec.ai/' },
@@ -342,13 +397,14 @@ export const comparisons: ComparisonPage[] = [
     optionB: 'Profound (SaaS Platform)',
     summary:
       'Profound combines answer engine insights (Prompt Volumes, Agent Analytics) with marketing agents that operate across Perplexity, ChatGPT, Claude, Gemini, Grok, and more — plus a public AEO Report and Profound Index. It is the most ambitious platform in this group, aimed at teams that want to build their own AI search operation. For businesses without that operational capacity, aibizmod\'s managed service is the practical alternative: the same monitoring questions get answered inside the audit, and the recommendations become implemented fixes with a 90-day roadmap — no platform configuration, no agent setup, no hiring.',
+    answerBlock: 'Profound combines prompt volumes, agent analytics, and marketing agents across ChatGPT, Perplexity, Claude, Gemini, and Grok — built for teams building their own AI search operation. aibizmod delivers the same monitoring inside a managed audit with a 90-day roadmap, no platform configuration required.',
     table: [
       { feature: 'What you get', optionA: 'Managed audit, implemented fixes, and monthly scorecard', optionB: 'Agent platform: prompt volumes, agent analytics, and insights' },
       { feature: 'Who does the work', optionA: 'Our technical team plans and executes the GEO programme', optionB: 'Your team configures agents and runs the programme' },
       { feature: 'Agents and automation', optionA: 'We use AI-assisted workflows internally and report outcomes', optionB: 'Platform-native agents for creating and operating campaigns' },
       { feature: 'Public data', optionA: 'Our methodology, benchmarks guide, and free audit report', optionB: 'AEO Report, Profound Index, research hub' },
       { feature: 'Implementation', optionA: 'Included — the roadmap is executed for you', optionB: 'Agents execute within the platform; page changes are still yours' },
-      { feature: 'Cost model', optionA: 'Fixed project or retainer', optionB: 'Subscription pricing with demo' },
+      { feature: 'Cost model', optionA: 'Fixed project or retainer with complete code and schema execution', optionB: 'Subscription: Starter $99/mo (ChatGPT only), Growth $399/mo (100 prompts, 3 engines), Enterprise $2,000–$5,000+/mo' },
       { feature: 'Best for', optionA: 'Teams that want the outcome without building an AI search operation', optionB: 'Teams that want to build their own AI search capability' },
     ],
     decisionRules: [
@@ -362,6 +418,12 @@ export const comparisons: ComparisonPage[] = [
       'Agent platforms shift the work to configuration and operation — someone must still own strategy, content quality, and page changes.',
       'A managed engagement gives you expertise on tap but not a platform you keep after the programme ends.',
       'For most service businesses, the binding constraint is expertise, not software — which is where a managed service wins.',
+    ],
+    faqs: [
+      { q: 'What are Profound\'s agents?', a: 'Profound offers marketing agents that operate across Perplexity, ChatGPT, Claude, Gemini, and Grok. They help with prompt volumes, agent analytics, and campaign execution — but require configuration and operational expertise from your team.' },
+      { q: 'Is Profound suitable for a small business?', a: 'Profound is aimed at teams building their own AI search operation. Small businesses without dedicated GEO expertise typically find a managed service like aibizmod more practical — the audit and implementation are done for you.' },
+      { q: 'How does aibizmod\'s managed service compare to Profound\'s agents?', a: 'aibizmod delivers the monitoring and implementation as one service — no platform setup, no agent configuration. You get a 90-day roadmap with executed fixes and a monthly scorecard, handled by our technical team.' },
+      { q: 'Can I use Profound for research and aibizmod for implementation?', a: 'Yes. Profound\'s research hub and AEO Report are useful for understanding the landscape. aibizmod can then execute the page-level fixes, schema updates, and content changes that move the numbers.' },
     ],
     sources: [
       { label: 'Profound — answer engine insights and agents', url: 'https://www.tryprofound.com/' },
@@ -385,6 +447,7 @@ export const comparisons: ComparisonPage[] = [
     optionB: 'AIclicks (SaaS Platform)',
     summary:
       'AIclicks is a metrics-first GEO analytics platform — visibility, share of voice, position, and citation frequency — with prompt fan-out, competitor tracking, sentiment analysis, and even a content agent. It is well documented (API and MCP included) and suits product-led teams. The aibizmod alternative is a delivered programme: we run the equivalent measurements — prompt sets, citation gaps, competitor comparisons, sentiment — and then implement the fixes and hand over a monthly scorecard. Choose the platform if you want to run analytics yourself; choose the service if you want someone to move the numbers.',
+    answerBlock: 'AIclicks measures visibility, share of voice, position, and citation frequency with prompt fan-out, competitor tracking, sentiment analysis, and a content agent — well-documented with API and MCP access. aibizmod runs the same measurements and implements the fixes, delivering a monthly scorecard.',
     table: [
       { feature: 'What you get', optionA: 'Managed audit, fixes, and scorecard — delivered end to end', optionB: 'Analytics platform: visibility, SoV, position, citation metrics' },
       { feature: 'Prompts', optionA: 'Prompt map built for your industry as part of the audit', optionB: 'Prompt creation, discover, and query fan-out features' },
@@ -406,6 +469,12 @@ export const comparisons: ComparisonPage[] = [
       'Dashboards report on problems; they do not implement the fixes — the content agent helps, but quality still depends on your team.',
       'A delivered programme gives deep expertise and execution, while a platform gives continuous self-serve data.',
       'If your goal is improved AI visibility rather than owning analytics infrastructure, start with the audit and decide later whether you need the platform.',
+    ],
+    faqs: [
+      { q: 'What metrics does AIclicks track?', a: 'AIclicks measures visibility score, share of voice, position, and citation frequency across AI platforms. It includes prompt fan-out, competitor tracking, sentiment analysis, and a content agent for generating drafts.' },
+      { q: 'Does AIclicks implement fixes for me?', a: 'Partially. AIclicks has a content agent that generates drafts, but page-level changes, schema updates, and content restructuring still need to be implemented by your team or an agency.' },
+      { q: 'How does aibizmod\'s service differ from AIclicks?', a: 'AIclicks gives you the analytics stack with API and MCP access. aibizmod runs the same measurements — prompts, citation gaps, competitor comparisons, sentiment — and implements the fixes, delivering a monthly scorecard with the work done for you.' },
+      { q: 'Which is better for developer-led teams?', a: 'AIclicks — its documentation, API, and MCP support are genuinely developer-friendly. aibizmod is better for teams that want the outcome without building analytics infrastructure.' },
     ],
     sources: [
       { label: 'AIclicks — features documentation', url: 'https://docs.aiclicks.io/features' },

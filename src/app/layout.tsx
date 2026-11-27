@@ -43,9 +43,16 @@ const entityGraph = {
 			foundingDate: '2019',
 			sameAs: [
 				'https://linkedin.com/company/aibizmod',
-				'https://instagram.com/aibizmod',
+				'https://www.instagram.com/aibizmod2026/',
 				'https://pinterest.com/aibizmod',
 				'https://facebook.com/aibizmod',
+				'https://medium.com/@aibizmod_60676',
+				'https://aibizmod.substack.com',
+				'https://discord.com/invite/bS3zQjGa5',
+				'https://bsky.app/profile/aibizmod.bsky.social',
+				'https://www.quora.com/profile/Aibizmod',
+				'https://mastodon.social/@aibizmod12',
+				'https://www.threads.com/@aibizmod',
 			],
 			knowsAbout: [
 				'Web Development',
@@ -56,6 +63,7 @@ const entityGraph = {
 				'Business Process Automation',
 				'Customer Experience Management',
 				'IT Consulting',
+				'Microsoft 365 Copilot and Power Platform',
 			],
 		},
 		{
@@ -67,6 +75,39 @@ const entityGraph = {
 				'End-to-end technology services for modern businesses — web development, mobile apps, digital marketing, cloud infrastructure, and automation.',
 			publisher: { '@id': 'https://aibizmod.com/#organization' },
 			inLanguage: 'en',
+		},
+		{
+			'@type': 'SoftwareApplication',
+			'@id': 'https://aibizmod.com/#software',
+			name: 'aibizmod',
+			applicationCategory: 'BusinessApplication',
+			operatingSystem: 'All',
+			url: 'https://aibizmod.com',
+			description:
+				'Enterprise AI search, automation, and tech services platform grounded in deterministic knowledge graph reasoning.',
+			publisher: { '@id': 'https://aibizmod.com/#organization' },
+			featureList: [
+				'AI search with source attribution',
+				'Knowledge graph reasoning',
+				'Multi-hop context retrieval',
+				'Deterministic AI answers',
+				'On-premise zero-data-egress execution',
+			],
+			isBasedOn: {
+				'@type': 'SoftwareSourceCode',
+				name: 'VeritasGraph',
+				codeRepository: 'https://github.com/bibinprathap/VeritasGraph',
+				url: 'https://bibinprathap.github.io/VeritasGraph/index.html',
+				sameAs: [
+					'https://github.com/bibinprathap/VeritasGraph',
+					'https://bibinprathap.github.io/VeritasGraph/index.html',
+				],
+			},
+			author: {
+				'@type': 'Person',
+				name: 'Bibin Prathap',
+				url: 'https://bibinprathap.com',
+			},
 		},
 	],
 };
@@ -93,10 +134,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-	title: {
-		default: 'aibizmod | Intelligent Tech Services',
-		template: '%s | aibizmod',
-	},
+	title: 'aibizmod | Intelligent Tech Services',
 	description:
 		'End-to-end technology services for modern businesses — web development, mobile apps, digital marketing, cloud infrastructure, and automation.',
 	keywords: [
@@ -114,6 +152,9 @@ export const metadata: Metadata = {
 		'managed it services',
 	],
 	metadataBase: new URL('https://aibizmod.com'),
+	verification: {
+		google: 'ifsj7MlKrmbeOn9NkKOI8ydf8fOXFqIpXFXks1XDUkk',
+	},
 	openGraph: {
 		type: 'website',
 		locale: 'en',
@@ -136,25 +177,25 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang='en' className={`${inter.variable} ${generalSans.variable} ${manrope.variable} ${fraunces.variable}`}>
+		<html
+			lang='en'
+			suppressHydrationWarning
+			className={`${inter.variable} ${generalSans.variable} ${manrope.variable} ${fraunces.variable}`}
+		>
 			<head>
 				<link rel="preconnect" href="https://api.fontshare.com" />
 				<link rel="preconnect" href="https://images.unsplash.com" />
-				{/* Satoshi font — load non-blocking via JS */}
-				<script
-					dangerouslySetInnerHTML={{
-						__html: `(function(){var d=document;var l=d.createElement('link');l.rel='stylesheet';l.href='https://api.fontshare.com/v2/css?f[]=satoshi@1,2,3,4,5,6,7&display=swap';d.head.appendChild(l)})()`
-					}}
+				{/* Satoshi — site-wide primary font (sans + display), also used by the logo */}
+				<link
+					rel="stylesheet"
+					href="https://api.fontshare.com/v2/css?f[]=satoshi@1,2,3,4,5,6,7&display=swap"
 				/>
-				<noscript>
-					<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@1,2,3,4,5,6,7&display=swap" />
-				</noscript>
 				<script
 					type='application/ld+json'
 					dangerouslySetInnerHTML={{ __html: JSON.stringify(entityGraph) }}
 				/>
 			</head>
-			<body className='font-sans antialiased bg-canvas text-ink'>
+			<body suppressHydrationWarning className='font-sans antialiased bg-canvas text-ink'>
 				<a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-white focus:text-cyan-700 focus:shadow-lg focus:outline-none focus:text-sm focus:font-medium">
 					Skip to main content
 				</a>

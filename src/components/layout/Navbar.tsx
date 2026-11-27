@@ -17,6 +17,7 @@ import {
 	Users,
 	Lightbulb,
 	Cpu,
+	Bot,
 	Phone,
 	type LucideIcon,
 } from 'lucide-react';
@@ -79,6 +80,12 @@ const serviceItems: {
 		desc: 'Strategic tech advisory & managed IT',
 		href: '/services/it-consulting-it-services',
 	},
+	{
+		icon: Bot,
+		name: 'Microsoft Stack & Copilot',
+		desc: 'Teams, Power Apps & Copilot automation',
+		href: '/services/microsoft-stack',
+	},
 ];
 
 // ─── Top-level nav links ──────────────────────────────────────────────────────
@@ -86,6 +93,7 @@ const serviceItems: {
 const navLinks = [
 	{ label: 'About', href: '/about' },
 	{ label: 'Services', href: '/services', hasDropdown: true },
+	{ label: 'Industries', href: '/industries' },
 	{ label: 'Tools', href: '/tools' },
 	{ label: 'Blog', href: '/blog' },
 	{ label: 'Contact', href: '/contact' },
@@ -107,10 +115,10 @@ function LogoI({
 	dotClassName: string;
 }) {
 	return (
-		<span className={`relative inline-block ${className}`} aria-hidden='true'>
+		<span className={`relative inline-block leading-none ${className}`} aria-hidden='true'>
 			{'\u0131'}
 			<span
-				className={`pointer-events-none absolute left-1/2 top-[0.32em] h-[0.18em] w-[0.18em] -translate-x-1/2 rounded-full ${dotClassName}`}
+				className={`pointer-events-none absolute left-1/2 top-[0.16em] h-[0.18em] w-[0.18em] -translate-x-1/2 rounded-full ${dotClassName}`}
 			/>
 		</span>
 	);

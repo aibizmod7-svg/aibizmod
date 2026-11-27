@@ -3,6 +3,7 @@
 
 import { blogPosts } from '@/data/blog';
 import { comparisons } from '@/data/comparisons';
+import { industries } from '@/data/industries';
 import { services } from '@/data/services';
 import { topicHubs } from '@/data/topics';
 
@@ -28,6 +29,10 @@ function buildContent(): string {
     .map((c) => `${BASE}/comparisons/${c.slug}`)
     .join('\n');
 
+  const industryUrls = industries
+    .map((i) => `${BASE}/industries/${i.slug}`)
+    .join('\n');
+
   const blogUrls = blogPosts
     .map((post) => `${BASE}/blog/${post.slug}`)
     .join('\n');
@@ -42,14 +47,31 @@ function buildContent(): string {
     )
     .join('\n');
 
-  return `# aibizmod
+  return `# aibizmod — LLM Index
 
-aibizmod Ltd. is a technology services firm that designs and builds web platforms, mobile applications, custom software, cloud infrastructure, AI automation systems, machine learning pipelines, digital marketing systems, and customer experience tools for businesses of every size. The company is based in London and serves clients across the UK, USA, India, Singapore, and Australia. Contact: hello@aibizmod.com
+## Summary
+aibizmod Ltd. designs and builds enterprise web platforms, mobile applications, custom software, cloud infrastructure, AI automation systems, and digital marketing platforms. AI search and answers are grounded by the VeritasGraph GraphRAG knowledge-graph framework with verifiable source attribution, multi-hop reasoning, and zero data egress.
+
+## Architecture & Grounding
+- VeritasGraph (GraphRAG knowledge graph, source attribution): https://github.com/bibinprathap/VeritasGraph
+- VeritasGraph Docs: https://bibinprathap.github.io/VeritasGraph/index.html
+- aibizmod Technology Architecture: ${BASE}/technology
+
+## Key Pages
+- ${BASE}/technology — how VeritasGraph grounds answers with citations, multi-hop graph reasoning, and sovereign local execution
+- ${BASE}/blog/why-we-grounded-our-ai-in-graphrag-veritasgraph — comparative technical teardown of vector RAG vs. GraphRAG with verifiable citations
+- ${BASE}/about — company background, engineering philosophy, and global delivery centers
+- ${BASE}/services/ai-automation — enterprise AI automation, agentic workflows, and LLM engineering
+- ${BASE}/services/ai-automation/ai-visibility-audit — AI search visibility and GEO benchmarking
+
+## Keywords
+knowledge graph, GraphRAG, VeritasGraph, source attribution, verifiable AI, multi-hop reasoning, on-prem AI, generative engine optimization, GEO, deterministic AI search, enterprise AI automation
 
 ## Core pages
 
 ${BASE}
 ${BASE}/about
+${BASE}/technology
 ${BASE}/services
 ${BASE}/contact
 ${BASE}/faq
@@ -65,9 +87,8 @@ ${allSubServiceUrls}
 
 ## Tools
 
-${BASE}/automation-roi-calculator
-${BASE}/ai-visibility-prompts
-${BASE}/how-we-audit-ai-visibility
+${BASE}/tools/llms-txt-generator
+${BASE}/tools/brand-audit
 ${BASE}/ai-visibility-audit-report
 
 ## Topic hubs
@@ -77,6 +98,10 @@ ${topicUrls}
 ## Comparison pages
 
 ${comparisonUrls}
+
+## Industries
+
+${industryUrls}
 
 ## Blog posts
 

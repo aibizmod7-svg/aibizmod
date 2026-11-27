@@ -6,14 +6,12 @@ import {
   ChevronRight,
   Sparkles,
   Search,
-  Calculator,
-  Clock,
   ArrowRight,
   BarChart3,
-  Zap,
+  Clock,
   Lock,
-  FileText,
-  BookOpen,
+  Tags,
+  Target,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -22,6 +20,26 @@ import StickyFooterLayout from "@/components/layout/StickyFooterLayout";
 import AnimatedSection from "@/components/common/AnimatedSection";
 
 const tools = [
+  {
+    title: "llms.txt Generator & Auditor",
+    description:
+      "Generate a perfectly formatted, spec-compliant llms.txt file for your website to boost discoverability and citation accuracy across ChatGPT, Perplexity, Claude, and AI crawlers.",
+    icon: Sparkles,
+    href: "/tools/llms-txt-generator",
+    badge: "Free",
+    badgeColor: "bg-cyan-500/10 text-cyan-700 border-cyan-200",
+    available: true,
+  },
+  {
+    title: "Brand Audit Tool",
+    description:
+      "Audit how clearly your website explains your brand to AI answer engines. Score entity clarity, citability, trust proof, and platform readiness for ChatGPT, Perplexity, Gemini, and Claude.",
+    icon: Target,
+    href: "/tools/brand-audit",
+    badge: "Free",
+    badgeColor: "bg-cyan-500/10 text-cyan-700 border-cyan-200",
+    available: true,
+  },
   {
     title: "AI Visibility Audit Report",
     description:
@@ -33,41 +51,11 @@ const tools = [
     available: true,
   },
   {
-    title: "Automation ROI Calculator",
+    title: "Keyword Research Tool",
     description:
-      "Estimate the time and cost savings from automating your business workflows. Input your team size, manual processes, and hours spent — get a projected ROI in seconds.",
-    icon: Calculator,
-    href: null,
-    badge: "Coming Soon",
-    badgeColor: "bg-amber-500/10 text-amber-700 border-amber-200",
-    available: false,
-  },
-  {
-    title: "AI Readiness Score",
-    description:
-      "Evaluate how prepared your business is to adopt AI tools and automation. Answer a few questions about your data, processes, and tech stack — receive a readiness score with a tailored adoption roadmap.",
-    icon: Zap,
-    href: null,
-    badge: "Coming Soon",
-    badgeColor: "bg-amber-500/10 text-amber-700 border-amber-200",
-    available: false,
-  },
-  {
-    title: "AI Visibility Prompts",
-    description:
-      "54 ready-to-run prompts for auditing how ChatGPT, Perplexity, Gemini, and Claude see your brand — retrieval, citation, recommendation, and sentiment checks. Copy, run, and score monthly.",
-    icon: FileText,
-    href: "/ai-visibility-prompts",
-    badge: "Free",
-    badgeColor: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-    available: true,
-  },
-  {
-    title: "Audit Methodology",
-    description:
-      "The documented five-metric methodology behind every AI visibility audit: prompt sets, scoring rubric, and the visibility levels — so you can evaluate the audit before you buy it.",
-    icon: BookOpen,
-    href: "/how-we-audit-ai-visibility",
+      "Enter a seed keyword and expand it into dozens of long-tail variants via Google autocomplete, grouped by intent. Free, no signup, no API key — export to CSV.",
+    icon: Tags,
+    href: "/keywords",
     badge: "Free",
     badgeColor: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
     available: true,
