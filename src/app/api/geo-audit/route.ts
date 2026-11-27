@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lookup } from "node:dns/promises";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
 // Shared types (imported by page)
@@ -27,6 +33,11 @@ export interface SubCheck {
   impact: "high" | "medium" | "low";
   note: string;
   rating?: "excellent" | "good" | "partial" | "weak" | "missing";
+  averageRating?: number;
+  sampleCount?: number;
+  passCount?: number;
+  partialCount?: number;
+  failCount?: number;
 }
 
 export interface Issue {
@@ -38,6 +49,7 @@ export interface Issue {
   recommendedFix: string;
   expectedScoreIncrease: number;
   category: string;
+  affectedPages?: string[];
 }
 
 export interface QuickWin {
@@ -72,6 +84,7 @@ export interface ContentMetric {
   score: number;
   status: "excellent" | "good" | "partial" | "weak" | "missing";
   explanation: string;
+  sampleCount?: number;
 }
 
 export interface RoadmapPhase {
@@ -84,10 +97,22 @@ export interface RoadmapPhase {
 
 export interface PageScore {
   url: string;
-  visibilityScore: number;
+  visibilityScore: number | null;
   criticalIssues: number;
   priority: "critical" | "high" | "medium" | "low";
   status: "analyzed" | "partial" | "inaccessible";
+}
+
+export interface CrawlSummary {
+  batchSize: number;
+  pagesDiscovered: number;
+  pagesAttempted: number;
+  pagesAnalyzed: number;
+  failedPages: number;
+  skippedByRobots: number;
+  truncated: boolean;
+  subdomainsIncluded: boolean;
+  complete?: boolean;
 }
 
 export interface AuditResult {
@@ -104,6 +129,7 @@ export interface AuditResult {
   contentMetrics: ContentMetric[];
   roadmap: RoadmapPhase[];
   pagesAnalyzed: PageScore[];
+  crawlSummary: CrawlSummary;
   recommendations: string[];
   checkedAt: string;
 }
@@ -116,20 +142,484 @@ function normalizeUrl(input: string): string {
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 }
 
-async function safeFetch(url: string, timeoutMs = 9000): Promise<string | null> {
+const CRAWL_BATCH_SIZE = 20;
+const INITIAL_CRAWL_PAGE_LIMIT = 50;
+const MAX_DISCOVERED_URLS = 20_000;
+const MAX_FETCH_BYTES = 1_000_000;
+const MAX_SITEMAP_BYTES = 10_000_000;
+const CRAWL_CONCURRENCY = 4;
+const CRAWL_MAX_DURATION_MS = 40_000;
+const MAX_SITEMAP_FILES = 100;
+const CRAWL_USER_AGENT = "GEO-Audit-Bot";
+
+interface CrawlScope {
+  rootHost: string;
+  includeSubdomains: boolean;
+  publicHostCache: Map<string, Promise<ResolvedAddress[] | null>>;
+}
+
+interface ResolvedAddress {
+  address: string;
+  family: number;
+}
+
+interface RobotsRule {
+  allow: boolean;
+  path: string;
+}
+
+interface RobotsPolicy {
+  rules: RobotsRule[];
+  sitemaps: string[];
+}
+
+interface CrawledPage {
+  url: string;
+  html: string;
+}
+
+interface CrawlOutcome {
+  pages: CrawledPage[];
+  failedUrls: string[];
+  skippedUrls: string[];
+  attemptedUrls: string[];
+  discoveredUrls: string[];
+  skippedByRobots: number;
+  pagesDiscovered: number;
+  truncated: boolean;
+  hostFiles: Map<string, { robotsTxt: string | null; llmsTxt: string | null; policy: RobotsPolicy }>;
+}
+
+function isPublicAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    const octets = address.split(".").map(Number);
+    if (octets.length !== 4 || octets.some(value => value < 0 || value > 255)) return false;
+    const [a, b, c] = octets;
+    return !(
+      a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0 && c <= 2) ||
+      (a === 192 && b === 168) ||
+      (a === 192 && b === 88 && c === 99) ||
+      (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+      (a === 203 && b === 0 && c === 113)
+    );
+  }
+
+  if (isIP(address) === 6) {
+    const groups = address.toLowerCase().split(":");
+    const firstGroup = Number.parseInt(groups[0] || "0", 16);
+    const secondGroup = Number.parseInt(groups[1] || "0", 16);
+    return firstGroup >= 0x2000 && firstGroup <= 0x3fff &&
+      firstGroup !== 0x2002 &&
+      !(firstGroup === 0x2001 && (secondGroup === 0 || secondGroup === 0x0db8));
+  }
+
+  return false;
+}
+
+function isHostInScope(hostname: string, scope: CrawlScope): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  return host === scope.rootHost ||
+    (scope.includeSubdomains && host.endsWith(`.${scope.rootHost}`));
+}
+
+async function getPublicAddresses(hostname: string, scope: CrawlScope): Promise<ResolvedAddress[] | null> {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  let check = scope.publicHostCache.get(host);
+  if (!check) {
+    check = (async () => {
+      if (isIP(host)) return isPublicAddress(host) ? [{ address: host, family: isIP(host) }] : null;
+      try {
+        const addresses = await lookup(host, { all: true, verbatim: true });
+        return addresses.length > 0 && addresses.every(({ address }) => isPublicAddress(address))
+          ? addresses
+          : null;
+      } catch {
+        return null;
+      }
+    })();
+    scope.publicHostCache.set(host, check);
+  }
+  return check;
+}
+
+async function isSafeTarget(input: string, scope: CrawlScope): Promise<boolean> {
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; GEO-Audit-Bot/3.0; +https://aibizmod.com)",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-    });
-    clearTimeout(t);
-    return res.ok ? await res.text() : null;
-  } catch { return null; }
+    const url = new URL(input);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username || url.password ||
+      (url.port && url.port !== "80" && url.port !== "443") ||
+      !isHostInScope(url.hostname, scope)
+    ) return false;
+    return (await getPublicAddresses(url.hostname, scope)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+async function safeFetch(
+  input: string,
+  scope: CrawlScope,
+  timeoutMs = 9000,
+  maxBytes = MAX_FETCH_BYTES,
+): Promise<string | null> {
+  let currentUrl = input;
+
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    if (!(await isSafeTarget(currentUrl, scope))) return null;
+    const url = new URL(currentUrl);
+    const addresses = await getPublicAddresses(url.hostname, scope);
+    if (!addresses || addresses.length === 0) return null;
+    const request = url.protocol === "https:" ? httpsRequest : httpRequest;
+
+    try {
+      const response = await new Promise<{ body?: string; location?: string } | null>(resolve => {
+        let settled = false;
+        const timerRef: { id?: ReturnType<typeof setTimeout> } = {};
+        const finish = (result: { body?: string; location?: string } | null) => {
+          if (settled) return;
+          settled = true;
+          if (timerRef.id) clearTimeout(timerRef.id);
+          resolve(result);
+        };
+        const req = request(url, {
+          headers: {
+            "User-Agent": `${CRAWL_USER_AGENT}/3.0 (+https://aibizmod.com)`,
+            "Accept": "text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.8",
+            "Accept-Encoding": "identity",
+          },
+          lookup: (_hostname, options, callback) => {
+            const selected = addresses[0];
+            if (typeof options === "object" && options !== null && options.all) {
+              callback(null, addresses);
+            } else {
+              callback(null, selected.address, selected.family);
+            }
+          },
+        }, response => {
+          const status = response.statusCode || 0;
+          if (status >= 300 && status < 400) {
+            const location = response.headers.location;
+            response.resume();
+            finish(typeof location === "string" ? { location } : null);
+            return;
+          }
+          const contentLength = Number(response.headers["content-length"]);
+          const contentEncoding = response.headers["content-encoding"];
+          if (status < 200 || status >= 300 || contentLength > maxBytes ||
+            (contentEncoding && contentEncoding !== "identity")) {
+            response.destroy();
+            finish(null);
+            return;
+          }
+
+          const chunks: Buffer[] = [];
+          let bytesRead = 0;
+          response.on("data", (chunk: Buffer | string) => {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            bytesRead += buffer.length;
+            if (bytesRead > maxBytes) {
+              response.destroy();
+              finish(null);
+            } else {
+              chunks.push(buffer);
+            }
+          });
+          response.on("end", () => finish({ body: Buffer.concat(chunks).toString("utf8") }));
+          response.on("error", () => finish(null));
+        });
+        req.on("error", () => finish(null));
+        timerRef.id = setTimeout(() => {
+          req.destroy();
+          finish(null);
+        }, timeoutMs);
+        req.end();
+      });
+
+      if (!response) return null;
+      if (response.location) {
+        if (redirects === 3) return null;
+        currentUrl = new URL(response.location, currentUrl).toString();
+        continue;
+      }
+      return response.body ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function normalizeCrawlUrl(value: string, baseUrl: string, scope: CrawlScope, allowXml = false): string | null {
+  try {
+    const url = new URL(value, baseUrl);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username || url.password ||
+      (url.port && url.port !== "80" && url.port !== "443") ||
+      !isHostInScope(url.hostname, scope) ||
+      url.search
+    ) return null;
+
+    url.hash = "";
+    if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
+    if (/\.(?:css|js|mjs|json|gz|png|jpe?g|gif|webp|svg|ico|pdf|zip|woff2?|ttf|eot|mp[34]|mov)(?:$|\/)/i.test(url.pathname) ||
+      (!allowXml && /\.xml(?:$|\/)/i.test(url.pathname))) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseRobotsTxt(text: string | null): RobotsPolicy {
+  const groups: { agents: string[]; rules: RobotsRule[] }[] = [];
+  const sitemaps: string[] = [];
+  let current: { agents: string[]; rules: RobotsRule[] } = { agents: [], rules: [] };
+  let groupHasRules = false;
+
+  for (const rawLine of (text || "").split(/\r?\n/)) {
+    const line = rawLine.split("#", 1)[0].trim();
+    const separator = line.indexOf(":");
+    if (separator < 0) continue;
+    const directive = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (!value) continue;
+
+    if (directive === "sitemap") {
+      sitemaps.push(value);
+    } else if (directive === "user-agent") {
+      if (groupHasRules) {
+        groups.push(current);
+        current = { agents: [], rules: [] };
+        groupHasRules = false;
+      }
+      current.agents.push(value.toLowerCase());
+    } else if ((directive === "allow" || directive === "disallow") && current.agents.length > 0) {
+      current.rules.push({ allow: directive === "allow", path: value });
+      groupHasRules = true;
+    }
+  }
+  if (current.agents.length > 0) groups.push(current);
+
+  const matchingGroups = groups
+    .map(group => ({
+      group,
+      matchLength: Math.max(0, ...group.agents
+        .filter(agent => agent === "*" || CRAWL_USER_AGENT.toLowerCase().includes(agent))
+        .map(agent => agent === "*" ? 0 : agent.length)),
+    }))
+    .filter(({ group }) => group.agents.some(agent => agent === "*" || CRAWL_USER_AGENT.toLowerCase().includes(agent)));
+  const bestMatch = Math.max(0, ...matchingGroups.map(({ matchLength }) => matchLength));
+  const rules = matchingGroups
+    .filter(({ matchLength }) => matchLength === bestMatch)
+    .flatMap(({ group }) => group.rules);
+
+  return { rules, sitemaps };
+}
+
+function isAllowedByRobots(url: string, policy: RobotsPolicy): boolean {
+  let pathname: string;
+  try {
+    const parsed = new URL(url);
+    pathname = `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return false;
+  }
+
+  const matchingRules = policy.rules.filter(rule => {
+    const endAnchor = rule.path.endsWith("$");
+    const pattern = endAnchor ? rule.path.slice(0, -1) : rule.path;
+    const escaped = pattern
+      .split("*")
+      .map(segment => segment.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*");
+    const expression = new RegExp(`^${escaped}${endAnchor ? "$" : ".*$"}`);
+    return expression.test(pathname);
+  });
+  if (matchingRules.length === 0) return true;
+
+  const longestMatch = Math.max(...matchingRules.map(rule => rule.path.replace(/\*|\$$/g, "").length));
+  return matchingRules
+    .filter(rule => rule.path.replace(/\*|\$$/g, "").length === longestMatch)
+    .some(rule => rule.allow);
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&apos;/gi, "'");
+}
+
+function extractSitemapLocs(xml: string, tag: "sitemap" | "url"): string[] {
+  const results: string[] = [];
+  const blockPattern = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "gi");
+  let block: RegExpExecArray | null;
+  while ((block = blockPattern.exec(xml)) !== null) {
+    const loc = /<loc\b[^>]*>([\s\S]*?)<\/loc>/i.exec(block[1]);
+    if (loc) results.push(decodeXmlText(loc[1].trim()));
+  }
+  return results;
+}
+
+function extractPageLinks(html: string, pageUrl: string, scope: CrawlScope): string[] {
+  const links: string[] = [];
+  const linkPattern = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(html)) !== null) {
+    const href = match[1] || match[2] || match[3];
+    if (!href || /^(?:mailto:|tel:|javascript:|data:)/i.test(href)) continue;
+    const normalized = normalizeCrawlUrl(href, pageUrl, scope);
+    if (normalized) links.push(normalized);
+  }
+  return links;
+}
+
+async function crawlSite(
+  startUrl: string,
+  scope: CrawlScope,
+  requestedUrls?: string[],
+  initialPageLimit = INITIAL_CRAWL_PAGE_LIMIT,
+): Promise<CrawlOutcome> {
+  const startedAt = Date.now();
+  const pages: CrawledPage[] = [];
+  const failedUrls: string[] = [];
+  const skippedUrls: string[] = [];
+  const hostFiles = new Map<string, { robotsTxt: string | null; llmsTxt: string | null; policy: RobotsPolicy }>();
+  const hostFilePromises = new Map<string, Promise<{ robotsTxt: string | null; llmsTxt: string | null; policy: RobotsPolicy }>>();
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  let skippedByRobots = 0;
+  let truncated = false;
+
+  const getHostFiles = (pageUrl: string) => {
+    const origin = new URL(pageUrl).origin;
+    let promise = hostFilePromises.get(origin);
+    if (!promise) {
+      promise = (async () => {
+        const robotsTxt = await safeFetch(new URL("/robots.txt", origin).toString(), scope, 3000);
+        const policy = parseRobotsTxt(robotsTxt);
+        const llmsUrl = new URL("/llms.txt", origin).toString();
+        const llmsTxt = isAllowedByRobots(llmsUrl, policy)
+          ? await safeFetch(llmsUrl, scope, 3000)
+          : null;
+        const files = { robotsTxt, llmsTxt, policy };
+        hostFiles.set(origin, files);
+        return files;
+      })();
+      hostFilePromises.set(origin, promise);
+    }
+    return promise;
+  };
+
+  const candidateLimit = requestedUrls ? CRAWL_BATCH_SIZE : initialPageLimit;
+  const addCandidate = (url: string) => {
+    if (seen.has(url)) return;
+    if (seen.size >= MAX_DISCOVERED_URLS) {
+      truncated = true;
+      return;
+    }
+    seen.add(url);
+    if (candidates.length < candidateLimit) candidates.push(url);
+  };
+
+  const root = new URL(startUrl);
+  if (requestedUrls) {
+    for (const requestedUrl of requestedUrls) {
+      const normalized = normalizeCrawlUrl(requestedUrl, startUrl, scope);
+      if (normalized) addCandidate(normalized);
+    }
+  } else {
+    addCandidate(root.toString());
+    const rootFiles = await getHostFiles(root.toString());
+    const sitemapQueue = [
+      ...rootFiles.policy.sitemaps,
+      new URL("/sitemap.xml", root.origin).toString(),
+      new URL("/sitemap_index.xml", root.origin).toString(),
+    ];
+    const seenSitemaps = new Set<string>();
+    let sitemapCount = 0;
+
+    while (sitemapQueue.length > 0 && sitemapCount < MAX_SITEMAP_FILES &&
+      seen.size < MAX_DISCOVERED_URLS && Date.now() - startedAt < CRAWL_MAX_DURATION_MS) {
+      const sitemapUrl = normalizeCrawlUrl(sitemapQueue.shift() || "", root.origin, scope, true);
+      if (!sitemapUrl || seenSitemaps.has(sitemapUrl)) continue;
+      seenSitemaps.add(sitemapUrl);
+      sitemapCount++;
+      const sitemapFiles = await getHostFiles(sitemapUrl);
+      if (!isAllowedByRobots(sitemapUrl, sitemapFiles.policy)) {
+        skippedByRobots++;
+        continue;
+      }
+      const sitemapXml = await safeFetch(sitemapUrl, scope, 5000, MAX_SITEMAP_BYTES);
+      if (!sitemapXml) continue;
+
+      for (const child of extractSitemapLocs(sitemapXml, "sitemap")) {
+        const normalized = normalizeCrawlUrl(child, sitemapUrl, scope, true);
+        if (normalized && !seenSitemaps.has(normalized)) sitemapQueue.push(normalized);
+      }
+      for (const location of extractSitemapLocs(sitemapXml, "url")) {
+        const normalized = normalizeCrawlUrl(location, sitemapUrl, scope);
+        if (normalized) addCandidate(normalized);
+        if (seen.size >= MAX_DISCOVERED_URLS) {
+          truncated = true;
+          break;
+        }
+      }
+    }
+    if (sitemapQueue.length > 0 || Date.now() - startedAt >= CRAWL_MAX_DURATION_MS) truncated = true;
+  }
+
+  let cursor = 0;
+  while (cursor < candidates.length && Date.now() - startedAt < CRAWL_MAX_DURATION_MS) {
+    const batch = candidates.slice(cursor, cursor + CRAWL_CONCURRENCY);
+    cursor += batch.length;
+    const results = await Promise.all(batch.map(async pageUrl => {
+      const files = await getHostFiles(pageUrl);
+      if (!isAllowedByRobots(pageUrl, files.policy)) {
+        return { url: pageUrl, html: null, blocked: true };
+      }
+      const html = await safeFetch(pageUrl, scope, 6000);
+      return { url: pageUrl, html, blocked: false };
+    }));
+
+    for (const result of results) {
+      if (result.blocked) {
+        skippedByRobots++;
+        skippedUrls.push(result.url);
+        continue;
+      }
+      if (!result.html) {
+        failedUrls.push(result.url);
+        continue;
+      }
+      pages.push({ url: result.url, html: result.html });
+      for (const link of extractPageLinks(result.html, result.url, scope)) addCandidate(link);
+    }
+  }
+
+  if (cursor < candidates.length || Date.now() - startedAt >= CRAWL_MAX_DURATION_MS) truncated = true;
+  return {
+    pages,
+    failedUrls,
+    skippedUrls,
+    attemptedUrls: candidates.slice(0, cursor),
+    discoveredUrls: [...seen],
+    skippedByRobots,
+    pagesDiscovered: seen.size,
+    truncated,
+    hostFiles,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,58 +1864,273 @@ function buildRoadmap(issues: Issue[], overallScore: number): RoadmapPhase[] {
   ];
 }
 
+const RATING_VALUES: Record<Rating, number> = {
+  excellent: 100,
+  good: 75,
+  partial: 40,
+  weak: 20,
+  missing: 0,
+};
+
+function ratingFromPercent(score: number): Rating {
+  if (score >= 85) return "excellent";
+  if (score >= 65) return "good";
+  if (score >= 35) return "partial";
+  if (score > 0) return "weak";
+  return "missing";
+}
+
+function aggregateScoreResults(results: ScoreResult[]): ScoreResult {
+  if (results.length === 0) return { score: 0, recs: [], subChecks: [] };
+
+  const checksByKey = new Map<string, SubCheck[]>();
+  for (const result of results) {
+    for (const check of result.subChecks) {
+      const entries = checksByKey.get(check.key) || [];
+      entries.push(check);
+      checksByKey.set(check.key, entries);
+    }
+  }
+
+  const subChecks = [...checksByKey.entries()].map(([key, checks]): SubCheck => {
+    const average = checks.reduce((sum, check) => sum + RATING_VALUES[check.rating || (
+      check.status === "pass" ? "good" : check.status === "partial" ? "partial" : "missing"
+    )], 0) / checks.length;
+    const rating = ratingFromPercent(average);
+    const passed = checks.filter(check => check.status === "pass").length;
+    const partial = checks.filter(check => check.status === "partial").length;
+    const failed = checks.filter(check => check.status === "fail").length;
+    const impact = checks.some(check => check.impact === "high") ? "high"
+      : checks.some(check => check.impact === "medium") ? "medium" : "low";
+
+    return {
+      key,
+      label: checks[0].label,
+      status: rating === "excellent" || rating === "good" ? "pass" : rating === "partial" || rating === "weak" ? "partial" : "fail",
+      impact,
+      rating,
+      averageRating: average,
+      sampleCount: checks.length,
+      passCount: passed,
+      partialCount: partial,
+      failCount: failed,
+      note: `Across ${checks.length} pages: ${passed} passed, ${partial} were partial, and ${failed} failed.`,
+    };
+  });
+
+  const score = Math.round(results.reduce((sum, result) => sum + result.score, 0) / results.length);
+  const recs = [...new Set(results.flatMap(result => result.recs))];
+  return { score, recs, subChecks };
+}
+
+function aggregateIssues(pageIssues: { url: string; issues: Issue[] }[]): Issue[] {
+  const grouped = new Map<string, Issue & { affectedPages: string[] }>();
+  for (const { url, issues } of pageIssues) {
+    for (const issue of issues) {
+      const key = `${issue.id}:${issue.category}`;
+      const current = grouped.get(key);
+      if (current) {
+        current.affectedPages.push(url);
+      } else {
+        grouped.set(key, { ...issue, affectedPages: [url] });
+      }
+    }
+  }
+
+  const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+  return [...grouped.values()].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+}
+
+function aggregateEntities(pageEntities: EntityCheck[][]): EntityCheck[] {
+  const grouped = new Map<string, EntityCheck[]>();
+  for (const entities of pageEntities) {
+    for (const entity of entities) {
+      const key = `${entity.type}:${entity.entity}`;
+      const entries = grouped.get(key) || [];
+      entries.push(entity);
+      grouped.set(key, entries);
+    }
+  }
+
+  return [...grouped.values()].map(entities => {
+    const detectedEntities = entities.filter(entity => entity.detected);
+    const confidenceEntities = detectedEntities.length > 0 ? detectedEntities : entities;
+    return {
+      ...entities[0],
+      detected: detectedEntities.length > 0,
+      confidence: Math.round(confidenceEntities.reduce((sum, entity) => sum + entity.confidence, 0) / confidenceEntities.length),
+      recommendation: detectedEntities[0]?.recommendation || entities[0].recommendation,
+      sampleCount: entities.length,
+      detectedCount: detectedEntities.length,
+      confidenceSum: confidenceEntities.reduce((sum, entity) => sum + entity.confidence, 0),
+    };
+  });
+}
+
+function aggregateContentMetrics(pageMetrics: ContentMetric[][]): ContentMetric[] {
+  const grouped = new Map<string, ContentMetric[]>();
+  for (const metrics of pageMetrics) {
+    for (const metric of metrics) {
+      const entries = grouped.get(metric.key) || [];
+      entries.push(metric);
+      grouped.set(metric.key, entries);
+    }
+  }
+
+  return [...grouped.values()].map(metrics => {
+    const score = Math.round(metrics.reduce((sum, metric) => sum + metric.score, 0) / metrics.length);
+    const status = score >= 8 ? "excellent" : score >= 6 ? "good" : score >= 4 ? "partial" : score >= 1 ? "weak" : "missing";
+    return {
+      ...metrics[0],
+      score,
+      status,
+      sampleCount: metrics.length,
+      explanation: `Average across ${metrics.length} pages. ${metrics[0].explanation}`,
+    };
+  });
+}
+
+function calculateOverallScore(schemaRes: ScoreResult, citRes: ScoreResult, eeatRes: ScoreResult, techRes: ScoreResult, contentRes: ScoreResult, brandRes: ScoreResult): number {
+  return Math.min(100, Math.round(
+    schemaRes.score * 0.30 +
+    citRes.score * 0.25 +
+    eeatRes.score * 0.20 +
+    techRes.score * 0.10 +
+    contentRes.score * 0.10 +
+    brandRes.score * 0.05
+  ));
+}
+
 // ===========================================================================
 // Main POST handler
 // ===========================================================================
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as { url?: unknown };
+    const body = await request.json() as {
+      url?: unknown;
+      includeSubdomains?: unknown;
+      batchMode?: unknown;
+      requestedUrls?: unknown;
+    };
     const { url } = body;
+    const hasRequestedUrls = body.requestedUrls !== undefined;
+    const batchMode = body.batchMode === true || hasRequestedUrls;
+    if (hasRequestedUrls && (!Array.isArray(body.requestedUrls) ||
+      body.requestedUrls.length > CRAWL_BATCH_SIZE ||
+      body.requestedUrls.some(pageUrl => typeof pageUrl !== "string"))) {
+      return NextResponse.json({ error: `A crawl batch must contain at most ${CRAWL_BATCH_SIZE} URL strings.` }, { status: 400 });
+    }
+    const requestedUrls = hasRequestedUrls ? body.requestedUrls as string[] : undefined;
 
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
     const base = normalizeUrl(url);
-    let hostname: string;
-    try { hostname = new URL(base).hostname; }
+    let inputUrl: URL;
+    try { inputUrl = new URL(base); }
     catch { return NextResponse.json({ error: "Invalid URL" }, { status: 400 }); }
 
-    // Fetch main HTML
-    const html = await safeFetch(base, 12000);
-    if (!html) {
+    if (!["http:", "https:"].includes(inputUrl.protocol) || inputUrl.username || inputUrl.password) {
+      return NextResponse.json({ error: "Enter a valid public website URL" }, { status: 400 });
+    }
+
+    const includeSubdomains = body.includeSubdomains !== false;
+    const submittedHost = inputUrl.hostname.toLowerCase().replace(/\.$/, "");
+    const rootHost = includeSubdomains ? submittedHost.replace(/^www\./, "") : submittedHost;
+    const scope: CrawlScope = {
+      rootHost,
+      includeSubdomains,
+      publicHostCache: new Map(),
+    };
+    const startUrl = new URL("/", inputUrl.origin).toString();
+
+    if (!(await isSafeTarget(startUrl, scope))) {
       return NextResponse.json(
-        { error: `Unable to reach ${hostname}. The domain may be down, blocking requests, or the URL is incorrect.` },
+        { error: "Enter a publicly accessible website URL. Private, local, and out-of-scope hosts cannot be audited." },
         { status: 422 }
       );
     }
 
-    // Fetch supplementary files
-    const [llmsTxt, robotsTxt] = await Promise.all([
-      safeFetch(`${base.replace(/\/$/, "")}/llms.txt`, 5000),
-      safeFetch(`${base.replace(/\/$/, "")}/robots.txt`, 5000),
-    ]);
+    const crawl = await crawlSite(
+      startUrl,
+      scope,
+      requestedUrls,
+      batchMode ? CRAWL_BATCH_SIZE : INITIAL_CRAWL_PAGE_LIMIT,
+    );
+    const crawlBatch: {
+      attemptedUrls: string[];
+      discoveredUrls: string[];
+      failedUrls: string[];
+      skippedUrls: string[];
+      truncated: boolean;
+      maxDiscoveredUrls: number;
+      scoreCount?: number;
+      categoryScoreSums?: Record<string, number>;
+    } = {
+      attemptedUrls: crawl.attemptedUrls,
+      discoveredUrls: crawl.discoveredUrls,
+      failedUrls: crawl.failedUrls,
+      skippedUrls: crawl.skippedUrls,
+      truncated: crawl.truncated,
+      maxDiscoveredUrls: MAX_DISCOVERED_URLS,
+    };
+    if (crawl.pages.length === 0) {
+      if (batchMode) return NextResponse.json({ crawlBatch });
+      return NextResponse.json(
+        {
+          error: crawl.skippedByRobots > 0
+            ? "No pages could be audited because robots.txt disallows the discovered URLs."
+            : `Unable to analyze pages on ${submittedHost}. The domain may be unavailable or blocking requests.`,
+        },
+        { status: 422 }
+      );
+    }
 
-    const plainText = stripHtml(html);
-    const blocks = extractJsonLd(html);
+    const pageAudits = crawl.pages.map(page => {
+      const files = crawl.hostFiles.get(new URL(page.url).origin);
+      const plainText = stripHtml(page.html);
+      const blocks = extractJsonLd(page.html);
+      const schemaRes = scoreStructuredData(page.html, blocks);
+      const citRes = scoreAiCitability(page.html, files?.llmsTxt ?? null, files?.robotsTxt ?? null, blocks);
+      const eeatRes = scoreEeat(page.html, plainText);
+      const techRes = scoreTechnical(page.html, files?.robotsTxt ?? null);
+      const contentRes = scoreContentQuality(page.html, plainText);
+      const brandRes = scoreBrandAuthority(page.html, blocks);
+      const issues = buildIssues(schemaRes, citRes, eeatRes, techRes);
+      const score = calculateOverallScore(schemaRes, citRes, eeatRes, techRes, contentRes, brandRes);
 
-    // Score all 6 categories
-    const schemaRes  = scoreStructuredData(html, blocks);
-    const citRes     = scoreAiCitability(html, llmsTxt, robotsTxt, blocks);
-    const eeatRes    = scoreEeat(html, plainText);
-    const techRes    = scoreTechnical(html, robotsTxt);
-    const contentRes = scoreContentQuality(html, plainText);
-    const brandRes   = scoreBrandAuthority(html, blocks);
+      return {
+        url: page.url,
+        score,
+        schemaRes,
+        citRes,
+        eeatRes,
+        techRes,
+        contentRes,
+        brandRes,
+        issues,
+        entities: detectEntities(page.html, blocks, scope.rootHost),
+        contentMetrics: buildContentMetrics(page.html, plainText, blocks),
+      };
+    });
+    crawlBatch.scoreCount = pageAudits.length;
+    crawlBatch.categoryScoreSums = {
+      schema: pageAudits.reduce((sum, page) => sum + page.schemaRes.score, 0),
+      citability: pageAudits.reduce((sum, page) => sum + page.citRes.score, 0),
+      eeat: pageAudits.reduce((sum, page) => sum + page.eeatRes.score, 0),
+      technical: pageAudits.reduce((sum, page) => sum + page.techRes.score, 0),
+      content: pageAudits.reduce((sum, page) => sum + page.contentRes.score, 0),
+      brand: pageAudits.reduce((sum, page) => sum + page.brandRes.score, 0),
+    };
 
-    // Weighted overall (30+25+20+10+10+5 = 100)
-    const overallScore = Math.min(100, Math.round(
-      schemaRes.score  * 0.30 +
-      citRes.score     * 0.25 +
-      eeatRes.score    * 0.20 +
-      techRes.score    * 0.10 +
-      contentRes.score * 0.10 +
-      brandRes.score   * 0.05
-    ));
+    const schemaRes = aggregateScoreResults(pageAudits.map(page => page.schemaRes));
+    const citRes = aggregateScoreResults(pageAudits.map(page => page.citRes));
+    const eeatRes = aggregateScoreResults(pageAudits.map(page => page.eeatRes));
+    const techRes = aggregateScoreResults(pageAudits.map(page => page.techRes));
+    const contentRes = aggregateScoreResults(pageAudits.map(page => page.contentRes));
+    const brandRes = aggregateScoreResults(pageAudits.map(page => page.brandRes));
+    const overallScore = calculateOverallScore(schemaRes, citRes, eeatRes, techRes, contentRes, brandRes);
 
     // Citability score — weighted combination of citability category + content + schema
     const citabilityScore = Math.min(100, Math.round(
@@ -1456,7 +2161,7 @@ export async function POST(request: NextRequest) {
         weightedScore,
         maxWeightedScore: c.w,
         status: overallRatingFromScore(c.r.score),
-        description: `${c.label} analysis across ${c.r.subChecks.length} signals.`,
+        description: `Average across ${pageAudits.length} analyzed pages; ${c.r.subChecks.length} signals evaluated.`,
         whyLost: failedHigh.length > 0
           ? `Missing: ${failedHigh.map(s => s.label).join(", ")}`
           : partialHigh.length > 0
@@ -1469,19 +2174,42 @@ export async function POST(request: NextRequest) {
     });
 
     // Build derived data
-    const issues = buildIssues(schemaRes, citRes, eeatRes, techRes);
+    const issues = aggregateIssues(pageAudits.map(page => ({ url: page.url, issues: page.issues })));
     const quickWins = buildQuickWins(issues, schemaRes, citRes);
     const aiPlatforms = buildPlatformScores(overallScore, schemaRes, citRes, eeatRes);
-    const entities = detectEntities(html, blocks, hostname);
-    const contentMetrics = buildContentMetrics(html, plainText, blocks);
+    const entities = aggregateEntities(pageAudits.map(page => page.entities));
+    const contentMetrics = aggregateContentMetrics(pageAudits.map(page => page.contentMetrics));
     const roadmap = buildRoadmap(issues, overallScore);
 
-    const allRecs = [
+    const allRecs = [...new Set([
       ...schemaRes.recs,
       ...citRes.recs,
       ...eeatRes.recs,
       ...techRes.recs,
-    ].slice(0, 10);
+      ...contentRes.recs,
+      ...brandRes.recs,
+    ])].slice(0, 15);
+
+    const criticalIssueCounts = new Map<string, number>();
+    for (const page of pageAudits) {
+      criticalIssueCounts.set(page.url, page.issues.filter(issue => issue.severity === "critical").length);
+    }
+    const pagesAnalyzed: PageScore[] = [
+      ...pageAudits.map(page => ({
+        url: page.url,
+        visibilityScore: page.score,
+        criticalIssues: criticalIssueCounts.get(page.url) || 0,
+        priority: page.score < 25 ? "critical" as const : page.score < 45 ? "high" as const : page.score < 65 ? "medium" as const : "low" as const,
+        status: "analyzed" as const,
+      })),
+      ...crawl.failedUrls.map(failedUrl => ({
+        url: failedUrl,
+        visibilityScore: null,
+        criticalIssues: 0,
+        priority: "low" as const,
+        status: "inaccessible" as const,
+      })),
+    ];
 
     const result: AuditResult = {
       score: overallScore,
@@ -1503,20 +2231,22 @@ export async function POST(request: NextRequest) {
       entities,
       contentMetrics,
       roadmap,
-      pagesAnalyzed: [
-        {
-          url: `${hostname}/`,
-          visibilityScore: overallScore,
-          criticalIssues: issues.filter(i => i.severity === "critical").length,
-          priority: overallScore < 25 ? "critical" : overallScore < 45 ? "high" : overallScore < 65 ? "medium" : "low",
-          status: "analyzed",
-        },
-      ],
+      pagesAnalyzed,
+      crawlSummary: {
+        batchSize: batchMode ? CRAWL_BATCH_SIZE : INITIAL_CRAWL_PAGE_LIMIT,
+        pagesDiscovered: crawl.pagesDiscovered,
+        pagesAttempted: crawl.attemptedUrls.length,
+        pagesAnalyzed: crawl.pages.length,
+        failedPages: crawl.failedUrls.length,
+        skippedByRobots: crawl.skippedByRobots,
+        truncated: crawl.truncated,
+        subdomainsIncluded: includeSubdomains,
+      },
       recommendations: allRecs,
       checkedAt: new Date().toISOString(),
     };
 
-    return NextResponse.json(result);
+    return NextResponse.json(batchMode ? { ...result, crawlBatch } : result);
   } catch (error) {
     console.error("GEO audit error:", error);
     return NextResponse.json(

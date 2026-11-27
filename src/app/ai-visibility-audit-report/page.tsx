@@ -289,6 +289,208 @@ type ContentMetric = Record<string, any>;
 type AuditResult = Record<string, any>;
 
 const AUDIT_CACHE_TTL_MS = 5 * 60 * 1000;
+const CRAWL_BATCH_SIZE = 20;
+
+function auditRating(score: number): "excellent" | "good" | "partial" | "weak" | "missing" {
+  if (score >= 85) return "excellent";
+  if (score >= 65) return "good";
+  if (score >= 35) return "partial";
+  if (score > 0) return "weak";
+  return "missing";
+}
+
+function mergeAuditBatches(
+  results: AuditResult[],
+  coverage: { attempted: Set<string>; discovered: Set<string>; failed: Set<string>; skipped: Set<string>; truncated: boolean },
+): AuditResult {
+  const analyzedCount = results.reduce((sum, item) => sum + (item.crawlSummary?.pagesAnalyzed || 0), 0);
+  const initial = results[0];
+  const categoryDetails = (initial.categoryDetails || []).map((category: CategoryDetail) => {
+    const categories = results
+      .map(item => (item.categoryDetails || []).find((entry: CategoryDetail) => entry.key === category.key))
+      .filter(Boolean);
+    const categoryCount = results.reduce((sum, item) =>
+      sum + (item.crawlBatch?.scoreCount ?? item.crawlSummary?.pagesAnalyzed ?? 0), 0);
+    const rawScore = categoryCount > 0
+      ? Math.round(results.reduce((sum, item) => {
+        const batchCategory = (item.categoryDetails || []).find((entry: CategoryDetail) => entry.key === category.key);
+        const count = item.crawlBatch?.scoreCount ?? item.crawlSummary?.pagesAnalyzed ?? 0;
+        const scoreSum = item.crawlBatch?.categoryScoreSums?.[category.key];
+        return sum + (typeof scoreSum === "number" ? scoreSum : (batchCategory?.rawScore || 0) * count);
+      }, 0) / categoryCount)
+      : 0;
+    const checksByKey = new Map<string, Record<string, any>[]>();
+    for (const entry of categories) {
+      for (const check of entry.subChecks || []) {
+        const checks = checksByKey.get(check.key) || [];
+        checks.push(check);
+        checksByKey.set(check.key, checks);
+      }
+    }
+    const subChecks: Record<string, any>[] = [...checksByKey.entries()].map(([key, checks]) => {
+      const count = checks.reduce((sum, check) => sum + (check.sampleCount || 0), 0);
+      const average = count > 0
+        ? checks.reduce((sum, check) => sum + (check.averageRating || 0) * (check.sampleCount || 0), 0) / count
+        : 0;
+      const rating = auditRating(average);
+      const passCount = checks.reduce((sum, check) => sum + (check.passCount || 0), 0);
+      const partialCount = checks.reduce((sum, check) => sum + (check.partialCount || 0), 0);
+      const failCount = checks.reduce((sum, check) => sum + (check.failCount || 0), 0);
+      return {
+        key,
+        ...checks[0],
+        status: rating === "excellent" || rating === "good" ? "pass" : rating === "missing" ? "fail" : "partial",
+        rating,
+        averageRating: average,
+        sampleCount: count,
+        passCount,
+        partialCount,
+        failCount,
+        note: `Across ${count} pages: ${passCount} passed, ${partialCount} were partial, and ${failCount} failed.`,
+      };
+    });
+    const weight = category.weight;
+    const weightedScore = Math.round(rawScore * weight / 100);
+    const failedHigh = subChecks.filter(check => check.impact === "high" && check.status === "fail");
+    const partialHigh = subChecks.filter(check => check.impact === "high" && check.status === "partial");
+    return {
+      ...category,
+      rawScore,
+      weightedScore,
+      status: auditRating(rawScore),
+      description: `Average across ${analyzedCount} analyzed pages; ${subChecks.length} signals evaluated.`,
+      whyLost: failedHigh.length > 0
+        ? `Missing: ${failedHigh.map(check => check.label).join(", ")}`
+        : partialHigh.length > 0
+          ? `Incomplete: ${partialHigh.map(check => check.label).join(", ")}`
+          : "Good implementation — focus on excellence-tier optimizations.",
+      subChecks,
+    };
+  });
+
+  const issuesByKey = new Map<string, Issue>();
+  for (const item of results) {
+    for (const issue of item.issues || []) {
+      const key = `${issue.id}:${issue.category}`;
+      const current = issuesByKey.get(key);
+      const affectedPages = [...new Set([...(current?.affectedPages || []), ...(issue.affectedPages || [])])];
+      issuesByKey.set(key, { ...(current || issue), affectedPages });
+    }
+  }
+  const issues = [...issuesByKey.values()];
+  const metricGroups = new Map<string, ContentMetric[]>();
+  for (const item of results) {
+    for (const metric of item.contentMetrics || []) {
+      const metrics = metricGroups.get(metric.key) || [];
+      metrics.push(metric);
+      metricGroups.set(metric.key, metrics);
+    }
+  }
+  const contentMetrics = [...metricGroups.values()].map(metrics => {
+    const count = metrics.reduce((sum, metric) => sum + (metric.sampleCount || 0), 0);
+    const score = count > 0
+      ? Math.round(metrics.reduce((sum, metric) => sum + metric.score * (metric.sampleCount || 0), 0) / count)
+      : 0;
+    return {
+      ...metrics[0],
+      score,
+      sampleCount: count,
+      status: score >= 8 ? "excellent" : score >= 6 ? "good" : score >= 4 ? "partial" : score >= 1 ? "weak" : "missing",
+      explanation: `Average across ${count} pages. ${metrics[0].explanation}`,
+    };
+  });
+
+  const entityGroups = new Map<string, EntityCheck[]>();
+  for (const item of results) {
+    for (const entity of item.entities || []) {
+      const key = `${entity.type}:${entity.entity}`;
+      const entities = entityGroups.get(key) || [];
+      entities.push(entity);
+      entityGroups.set(key, entities);
+    }
+  }
+  const entities = [...entityGroups.values()].map(group => {
+    const detectedCount = group.reduce((sum, entity) => sum + (entity.detectedCount || 0), 0);
+    const confidenceEntities = detectedCount > 0 ? group.filter(entity => entity.detectedCount > 0) : group;
+    const confidenceWeight = confidenceEntities.reduce((sum, entity) =>
+      sum + (entity.detectedCount > 0 ? entity.detectedCount : entity.sampleCount || 0), 0);
+    const confidenceSum = confidenceEntities.reduce((sum, entity) => sum + (entity.confidenceSum || 0), 0);
+    return {
+      ...group[0],
+      detected: detectedCount > 0,
+      detectedCount,
+      confidence: confidenceWeight > 0 ? Math.round(confidenceSum / confidenceWeight) : group[0].confidence,
+      confidenceSum,
+      sampleCount: group.reduce((sum, entity) => sum + (entity.sampleCount || 0), 0),
+    };
+  });
+
+  const scoreBreakDown: Record<string, number> = {};
+  for (const category of categoryDetails) {
+    scoreBreakDown[({
+      schema: "structuredData",
+      citability: "aiCitability",
+      eeat: "eeat",
+      technical: "technical",
+      content: "contentQuality",
+      brand: "brandAuthority",
+    } as Record<string, string>)[category.key] || category.key] = category.rawScore;
+  }
+  const score = Math.min(100, Math.round(categoryDetails.reduce(
+    (sum: number, category: CategoryDetail) => sum + category.rawScore * category.weight / 100, 0,
+  )));
+  const categoryScore = (key: string) => categoryDetails.find((category: CategoryDetail) => category.key === key)?.rawScore || 0;
+  const citability = Math.min(100, Math.round(
+    categoryScore("citability") * 0.55 + categoryScore("schema") * 0.25 + categoryScore("content") * 0.20,
+  ));
+  const pageScores = new Map<string, PageScore>();
+  for (const item of results) {
+    for (const page of item.pagesAnalyzed || []) pageScores.set(page.url, page);
+  }
+  const aiPlatforms = (initial.aiPlatforms || []).map((platform: PlatformScore) => {
+    const count = results.reduce((sum, item) => sum + (item.crawlSummary?.pagesAnalyzed || 0), 0);
+    const averageScore = count > 0
+      ? Math.round(results.reduce((sum, item) => {
+        const entry = (item.aiPlatforms || []).find((candidate: PlatformScore) => candidate.id === platform.id);
+        return sum + (entry?.score || 0) * (item.crawlSummary?.pagesAnalyzed || 0);
+      }, 0) / count)
+      : platform.score;
+    return {
+      ...platform,
+      score: averageScore,
+      status: score >= 65 ? "compatible" : score >= 45 ? "partial" : score >= 25 ? "limited" : "incompatible",
+    };
+  });
+
+  return {
+    ...initial,
+    score,
+    band: score >= 75 ? "excellent" : score >= 60 ? "good" : score >= 45 ? "fair" : score >= 20 ? "poor" : "critical",
+    citability,
+    scoreBreakDown,
+    categoryDetails,
+    criticalIssues: issues.filter(issue => issue.severity === "critical"),
+    issues,
+    quickWins: [...new Map(results.flatMap(item => item.quickWins || []).map((win: QuickWin) => [win.id, win])).values()],
+    aiPlatforms,
+    entities,
+    contentMetrics,
+    pagesAnalyzed: [...pageScores.values()],
+    crawlSummary: {
+      batchSize: CRAWL_BATCH_SIZE,
+      pagesDiscovered: coverage.discovered.size,
+      pagesAttempted: coverage.attempted.size,
+      pagesAnalyzed: analyzedCount,
+      failedPages: coverage.failed.size,
+      skippedByRobots: coverage.skipped.size,
+      truncated: coverage.truncated,
+      subdomainsIncluded: initial.crawlSummary.subdomainsIncluded,
+      complete: true,
+    },
+    recommendations: [...new Set(results.flatMap(item => item.recommendations || []))].slice(0, 15),
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 function humanizeAuditKey(key: string): string {
   return key
@@ -310,6 +512,8 @@ function readCachedAudit(domain: string): AuditResult | null {
     const age = Date.now() - checkedAt;
     if (
       cached?.error ||
+      !cached?.crawlSummary ||
+      cached.crawlSummary.complete !== true ||
       !Number.isFinite(checkedAt) ||
       age < 0 ||
       age > AUDIT_CACHE_TTL_MS
@@ -335,7 +539,7 @@ type RoadmapPhase = {
 
 type PageScore = {
   url: string;
-  visibilityScore: number;
+  visibilityScore: number | null;
   criticalIssues: number;
   priority: string;
   status: string;
@@ -474,6 +678,15 @@ function formatDomain(url: string) {
   }
 }
 
+const PRODUCT_SCORE_BY_DOMAIN: Record<string, number> = {
+  "spacecapture.ai": 80,
+  "spacecrm.net": 80,
+  "space-sign.ai": 81,
+  "pmspace.ai": 83,
+  "spacehr.net": 82,
+  "aibizmod.com": 85,
+};
+
 function getFaviconUrl(domain: string) {
   try {
     const hostname = new URL(domain.startsWith("http") ? domain : `https://${domain}`).hostname;
@@ -505,7 +718,7 @@ function ScrollReveal({ children, className, delay = 0 }: { children: React.Reac
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
-      { threshold: 0.08 }
+      { threshold: 0 }
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -854,6 +1067,25 @@ function IssueCard({ issue }: { issue: Issue }) {
 
           {expanded && (
             <div className="mt-3 space-y-2.5 pt-3 border-t border-black/5">
+                  {Array.isArray(issue.affectedPages) && issue.affectedPages.length > 0 && (
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Found on {issue.affectedPages.length} {issue.affectedPages.length === 1 ? "page" : "pages"}
+                      </span>
+                      <ul className="mt-1 space-y-1">
+                        {issue.affectedPages.slice(0, 3).map((pageUrl: string) => (
+                          <li key={pageUrl} className="truncate">
+                            <a href={pageUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-700 hover:underline">
+                              {pageUrl}
+                            </a>
+                          </li>
+                        ))}
+                        {issue.affectedPages.length > 3 && (
+                          <li className="text-[11px] text-slate-500">and {issue.affectedPages.length - 3} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Why It Matters</span>
                 <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.whyItMatters}</p>
@@ -1020,6 +1252,9 @@ function PagesTable({ pages }: { pages: PageScore[] }) {
     const av = a[sortKey];
     const bv = b[sortKey];
     const dir = sortDir === "asc" ? 1 : -1;
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
     return av < bv ? -dir : av > bv ? dir : 0;
   });
 
@@ -1063,17 +1298,23 @@ function PagesTable({ pages }: { pages: PageScore[] }) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <ProgressBar score={page.visibilityScore} maxScore={100} />
-                    <span className="text-xs font-bold text-slate-900 w-8 flex-shrink-0">{page.visibilityScore}</span>
+                    {page.visibilityScore === null
+                      ? <span className="text-xs text-slate-400">Unavailable</span>
+                      : <>
+                        <ProgressBar score={page.visibilityScore} maxScore={100} />
+                        <span className="text-xs font-bold text-slate-900 w-8 flex-shrink-0">{page.visibilityScore}</span>
+                      </>}
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={cn(
-                    "text-xs font-bold px-2 py-0.5 rounded-full",
-                    page.criticalIssues > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
-                  )}>
-                    {page.criticalIssues}
-                  </span>
+                  {page.status === "inaccessible"
+                    ? <span className="text-xs text-slate-400">N/A</span>
+                    : <span className={cn(
+                      "text-xs font-bold px-2 py-0.5 rounded-full",
+                      page.criticalIssues > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                    )}>
+                      {page.criticalIssues}
+                    </span>}
                 </td>
                 <td className="px-4 py-3">
                   <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full capitalize", prioColor[page.priority])}>
@@ -1467,6 +1708,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
             citability: result.citability,
             scoreBreakDown: result.scoreBreakDown ?? result.scoreBreakdown,
             categoryDetails: result.categoryDetails,
+            crawlSummary: result.crawlSummary,
             checkedAt: result.checkedAt,
           };
       const { jsPDF } = await import("jspdf");
@@ -1672,6 +1914,14 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       writeText(`Recommendations: ${isAuthenticated ? Array.isArray(reportData.recommendations) ? reportData.recommendations.length : "Not provided by API" : "Sign in to unlock"}`);
       cursorY += 3;
 
+      if (hasRecord(reportData.crawlSummary)) {
+        addSection("Crawl Coverage");
+        for (const [key, value] of Object.entries(reportData.crawlSummary)) {
+          writeText(`${humanizeAuditKey(key)}: ${formatValue(value)}`, { indent: 2 });
+        }
+        cursorY += 2;
+      }
+
       if (breakdownEntries.length > 0) {
         const numericTotal = breakdownEntries.reduce(
           (total, [, value]) => total + (typeof value === "number" ? value : 0),
@@ -1721,17 +1971,6 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
         writeText("Detailed findings and recommendations are available to signed-in users and are intentionally excluded from this download.", {
           color: [100, 116, 139],
         });
-      }
-
-      addSection(isAuthenticated ? "Complete API Response" : "Public API Data Included");
-      writeText(isAuthenticated
-        ? "The following appendix preserves every field returned for this audit."
-        : "This appendix includes the fields available in the public report. Sign in to download the full audit data.", {
-        color: [100, 116, 139],
-      });
-      const rawResponse = JSON.stringify(reportData, null, 2);
-      for (const line of rawResponse.split("\n")) {
-        writeText(line || " ", { size: 7, font: "courier", color: [71, 85, 105] });
       }
 
       const totalPages = pdf.getNumberOfPages();
@@ -1969,6 +2208,36 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           </div>
         </div>
       </div>
+
+      {result.crawlSummary && (
+        <div className="rounded-2xl bg-white border border-slate-200/80 p-6 sm:p-8 shadow-sm ring-1 ring-slate-100">
+          <SectionHeader
+            icon={<Globe className="h-5 w-5" />}
+            title="Site Crawl Coverage"
+            subtitle={`The audit discovers indexable pages from XML sitemaps and internal links, then scores them in batches of ${result.crawlSummary.batchSize}.`}
+            iconGradient="from-cyan-500 to-teal-600"
+          />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              { label: "Pages Scored", value: result.crawlSummary.pagesAnalyzed },
+              { label: "URLs Discovered", value: result.crawlSummary.pagesDiscovered },
+              { label: "Pages Attempted", value: result.crawlSummary.pagesAttempted },
+              { label: "Blocked by Robots", value: result.crawlSummary.skippedByRobots },
+              { label: "Fetch Failures", value: result.crawlSummary.failedPages },
+            ].map(item => (
+              <div key={item.label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
+                <p className="mt-1 text-xl font-bold text-slate-900">{item.value}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-slate-500">
+            {result.crawlSummary.subdomainsIncluded ? "Subdomains were included." : "Only the submitted hostname was included."}
+            {" "}Overall score uses equal-weight category averages across successfully analyzed pages.
+            {result.crawlSummary.truncated && " The crawl reached a safety limit, so additional URLs may not be included."}
+          </p>
+        </div>
+      )}
 
       {/* ── SECTION 2: Category Breakdown ──────────────────────────────────── */}
       <div className="rounded-2xl bg-white border border-slate-200/80 p-6 sm:p-8 shadow-sm ring-1 ring-slate-100">
@@ -2234,17 +2503,11 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Globe className="h-5 w-5" />}
-          title="Key Pages Analyzed"
-          subtitle="Visibility score and issue summary by analyzed page — click column headers to sort"
+          title="Pages Analyzed"
+          subtitle="Page-level visibility scores and critical issue counts — click column headers to sort"
           iconGradient="from-emerald-500 to-teal-600"
         />
         <PagesTable pages={result.pagesAnalyzed ?? []} />
-        <p className="text-[11px] text-slate-400 mt-3 text-center">
-          Full multi-page analysis covers your homepage only. 
-          <a href="/contact" className="text-cyan-600 hover:text-cyan-700 font-medium ml-1">
-            Contact us for a full site audit →
-          </a>
-        </p>
       </div>
 
       {/* ── CTA ───────────────────────────────────────────────────────────── */}
@@ -2318,6 +2581,7 @@ function AuditReportContent() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [auditProgress, setAuditProgress] = useState("");
 
   const sectionRef = useRef<HTMLElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -2455,25 +2719,97 @@ function AuditReportContent() {
 
     setIsLoading(true);
     setResult(null);
+    setAuditProgress("Discovering indexable pages...");
     try {
-      const res = await fetch("/api/geo-audit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: cleaned }),
-      });
-      const data = (await res.json()) as AuditResult & { error?: string };
-      if (!res.ok) {
-        const msg = data.error || "Audit failed";
-        if (msg.includes("DNS resolution failed") || msg.includes("hostname not resolvable")) {
-          throw new Error(`"${cleaned}" could not be found. Please check the spelling and try again.`);
+      const requestBatch = async (requestedUrls?: string[]) => {
+        const res = await fetch("/api/geo-audit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: cleaned,
+            batchMode: true,
+            ...(requestedUrls ? { requestedUrls } : {}),
+          }),
+        });
+        const data = (await res.json()) as AuditResult & { error?: string };
+        if (!res.ok) {
+          const msg = data.error || "Audit failed";
+          if (msg.includes("DNS resolution failed") || msg.includes("hostname not resolvable")) {
+            throw new Error(`"${cleaned}" could not be found. Please check the spelling and try again.`);
+          }
+          throw new Error(msg);
         }
-        throw new Error(msg);
+        return data;
+      };
+      const firstBatch = await requestBatch();
+      if (!firstBatch.crawlBatch) throw new Error("The audit response did not include crawl progress.");
+
+      const batchResults: AuditResult[] = [];
+      const coverage = {
+        attempted: new Set<string>(),
+        discovered: new Set<string>(),
+        failed: new Set<string>(),
+        skipped: new Set<string>(),
+        truncated: false,
+      };
+      const pendingUrls: string[] = [];
+      const maxDiscoveredUrls = firstBatch.crawlBatch.maxDiscoveredUrls || 20000;
+
+      const acceptBatch = (data: AuditResult) => {
+        const batch = data.crawlBatch;
+        if (!batch) throw new Error("The audit batch response did not include crawl progress.");
+        if (Array.isArray(data.categoryDetails)) batchResults.push(data);
+        for (const pageUrl of batch.attemptedUrls || []) {
+          if (typeof pageUrl !== "string") continue;
+          coverage.attempted.add(pageUrl);
+          coverage.discovered.add(pageUrl);
+        }
+        for (const pageUrl of batch.failedUrls || []) coverage.failed.add(pageUrl);
+        for (const pageUrl of batch.skippedUrls || []) coverage.skipped.add(pageUrl);
+        coverage.truncated ||= batch.truncated === true;
+        for (const pageUrl of batch.discoveredUrls || []) {
+          if (typeof pageUrl !== "string" || coverage.discovered.has(pageUrl)) continue;
+          if (coverage.discovered.size >= maxDiscoveredUrls) {
+            coverage.truncated = true;
+            continue;
+          }
+          coverage.discovered.add(pageUrl);
+          pendingUrls.push(pageUrl);
+        }
+      };
+
+      acceptBatch(firstBatch);
+      setAuditProgress(`Scored ${coverage.attempted.size} pages; ${coverage.discovered.size} URLs discovered...`);
+      while (pendingUrls.length > 0) {
+        const requestedUrls: string[] = [];
+        while (pendingUrls.length > 0 && requestedUrls.length < CRAWL_BATCH_SIZE) {
+          const pageUrl = pendingUrls.shift()!;
+          if (!coverage.attempted.has(pageUrl)) requestedUrls.push(pageUrl);
+        }
+        if (requestedUrls.length === 0) continue;
+
+        const nextBatch = await requestBatch(requestedUrls);
+        acceptBatch(nextBatch);
+        const unattemptedUrls = requestedUrls.filter(pageUrl => !coverage.attempted.has(pageUrl));
+        if (unattemptedUrls.length > 0) {
+          throw new Error(`The crawl stopped before attempting ${unattemptedUrls.length} pages. Please rerun the audit to continue.`);
+        }
+        setAuditProgress(`Scored ${coverage.attempted.size} pages; ${coverage.discovered.size} URLs discovered...`);
       }
-      setResult(data);
+
+      if (batchResults.length === 0) throw new Error("No indexable pages could be analyzed.");
+      const mergedResult = mergeAuditBatches(batchResults, coverage);
+      setResult(mergedResult);
+      try {
+        sessionStorage.setItem(`audit-cache-${cleaned}`, JSON.stringify(mergedResult));
+      } catch (cacheError) {
+        console.error("[Aibizmod] Failed to cache completed audit:", cacheError);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsLoading(false);
+      setAuditProgress("");
     }
   }, []);
 
@@ -2521,6 +2857,7 @@ function AuditReportContent() {
   };
 
   const displayDomain = domain ? formatDomain(domain) : "";
+  const configuredProductScore = PRODUCT_SCORE_BY_DOMAIN[displayDomain.toLowerCase().replace(/\.$/, "")] ?? null;
   const showResults = result && !isLoading;
 
   return (
@@ -2624,6 +2961,13 @@ function AuditReportContent() {
                   </StarButton>
                 </form>
 
+                {isLoading && (
+                  <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-white/80 px-4 py-2 text-sm text-cyan-800 shadow-sm" role="status">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {auditProgress || "Scanning the site..."}
+                  </div>
+                )}
+
                 <div className="mt-3 flex flex-wrap justify-center gap-2 text-[11px] text-stone-600 sm:gap-3 sm:text-[12px]">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5">
                     <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
@@ -2631,7 +2975,7 @@ function AuditReportContent() {
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5">
                     <Activity className="h-3.5 w-3.5 text-cyan-500" />
-                    Takes ~30 seconds
+                    Whole-site page coverage
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
@@ -2769,7 +3113,7 @@ function AuditReportContent() {
                     className="mt-2 text-sm font-medium uppercase tracking-[0.18em] text-slate-400"
                     style={{ animation: "fadeUp 600ms ease-out 180ms both" }}
                   >
-                    AI Visibility Score
+                    {configuredProductScore === null ? "AI Visibility Score" : "Live Audit Score"}
                   </p>
 
                   {/* 3. Score Ring — Visual Centerpiece */}
@@ -2785,6 +3129,23 @@ function AuditReportContent() {
                     />
                     <ScoreRing score={result.score} size={200} />
                   </div>
+
+                  {configuredProductScore !== null && (
+                    <div className="mt-5 w-full max-w-sm rounded-2xl border border-cyan-100 bg-white/90 px-5 py-4 text-left shadow-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-cyan-800">AIBizmod product score</p>
+                          <p className="mt-1 text-xs text-slate-500">Configured reference score</p>
+                        </div>
+                        <p className="shrink-0 text-3xl font-bold text-slate-900">
+                          {configuredProductScore}<span className="text-sm font-medium text-slate-400">/100</span>
+                        </p>
+                      </div>
+                      <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                        This configured product score is separate from the live audit result shown above.
+                      </p>
+                    </div>
+                  )}
 
                   {/* 4. Band Pill */}
                   <div

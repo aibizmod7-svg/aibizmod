@@ -105,28 +105,6 @@ function ScanningContent() {
     setReady(true);
   }, []);
 
-  // Pre-fetch audit result in background during circular StrandOrb scan
-  useEffect(() => {
-    if (!rawUrl) return;
-    const targetUrl = rawUrl.trim();
-    const fetchAudit = async () => {
-      try {
-        const res = await fetch("/api/geo-audit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: targetUrl }),
-        });
-        const data = await res.json();
-        if (res.ok && data) {
-          sessionStorage.setItem("audit-cache-" + targetUrl, JSON.stringify(data));
-        }
-      } catch {
-        // Fallback handled on report page
-      }
-    };
-    void fetchAudit();
-  }, [rawUrl]);
-
   // 2. Drive rAF progress & ticker step changes over TOTAL_MS
   useEffect(() => {
     startTimeRef.current = null;
