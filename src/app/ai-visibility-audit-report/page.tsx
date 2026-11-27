@@ -680,6 +680,7 @@ function formatDomain(url: string) {
 
 const PRODUCT_SCORE_BY_DOMAIN: Record<string, number> = {
   "spacecapture.ai": 80,
+  "spacelean.ai": 80,
   "spacecrm.net": 80,
   "space-sign.ai": 81,
   "pmspace.ai": 83,
@@ -3023,7 +3024,9 @@ function AuditReportContent() {
         )}
 
         {showResults && (() => {
-          const band = BAND_META[result.band] || BAND_META.poor;
+          const heroScore = configuredProductScore ?? result.score;
+          const heroBandKey = heroScore >= 75 ? "excellent" : heroScore >= 60 ? "good" : heroScore >= 45 ? "fair" : heroScore >= 20 ? "poor" : "critical";
+          const heroBand = BAND_META[heroBandKey] || BAND_META.poor;
           const criticalCount = Array.isArray(result.criticalIssues) ? result.criticalIssues.filter((i: Issue) => i.severity === "critical").length : 0;
           const quickWinCount = Array.isArray(result.quickWins) ? result.quickWins.length : 0;
           const platformCount = Array.isArray(result.aiPlatforms) ? result.aiPlatforms.length : 5;
@@ -3060,7 +3063,7 @@ function AuditReportContent() {
                 {/* Band-color-aware floating glow */}
                 <div
                   className="pointer-events-none absolute left-1/2 top-36 z-0 h-96 w-96 -translate-x-1/2 rounded-full blur-[100px]"
-                  style={{ backgroundColor: band.color, opacity: 0.08 }}
+                  style={{ backgroundColor: heroBand.color, opacity: 0.08 }}
                   aria-hidden="true"
                 />
                 <div
@@ -3075,8 +3078,8 @@ function AuditReportContent() {
                   <div
                     className="inline-flex items-center gap-2 rounded-full border bg-white/55 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] shadow-[0_12px_35px_rgba(59,130,246,0.10)] backdrop-blur-md"
                     style={{
-                      borderColor: band.color + "33",
-                      color: band.color,
+                      borderColor: heroBand.color + "33",
+                      color: heroBand.color,
                       animation: "fadeUp 600ms ease-out both",
                     }}
                   >
@@ -3113,7 +3116,7 @@ function AuditReportContent() {
                     className="mt-2 text-sm font-medium uppercase tracking-[0.18em] text-slate-400"
                     style={{ animation: "fadeUp 600ms ease-out 180ms both" }}
                   >
-                    {configuredProductScore === null ? "AI Visibility Score" : "Live Audit Score"}
+                    {configuredProductScore === null ? "AI Visibility Score" : "AIBizmod Product Score"}
                   </p>
 
                   {/* 3. Score Ring — Visual Centerpiece */}
@@ -3124,28 +3127,11 @@ function AuditReportContent() {
                     {/* Score ring glow halo */}
                     <div
                       className="absolute inset-0 -m-4 rounded-full blur-2xl"
-                      style={{ backgroundColor: band.color, opacity: 0.1 }}
+                      style={{ backgroundColor: heroBand.color, opacity: 0.1 }}
                       aria-hidden="true"
                     />
-                    <ScoreRing score={result.score} size={200} />
+                    <ScoreRing score={heroScore} size={200} />
                   </div>
-
-                  {configuredProductScore !== null && (
-                    <div className="mt-5 w-full max-w-sm rounded-2xl border border-cyan-100 bg-white/90 px-5 py-4 text-left shadow-sm">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wide text-cyan-800">AIBizmod product score</p>
-                          <p className="mt-1 text-xs text-slate-500">Configured reference score</p>
-                        </div>
-                        <p className="shrink-0 text-3xl font-bold text-slate-900">
-                          {configuredProductScore}<span className="text-sm font-medium text-slate-400">/100</span>
-                        </p>
-                      </div>
-                      <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-                        This configured product score is separate from the live audit result shown above.
-                      </p>
-                    </div>
-                  )}
 
                   {/* 4. Band Pill */}
                   <div
@@ -3155,14 +3141,14 @@ function AuditReportContent() {
                     <span
                       className={cn(
                         "inline-flex items-center gap-2 rounded-full border px-5 py-2 text-sm font-bold capitalize",
-                        band.bg
+                        heroBand.bg
                       )}
                     >
                       <span
                         className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: band.color }}
+                        style={{ backgroundColor: heroBand.color }}
                       />
-                      {band.label}
+                      {heroBand.label}
                     </span>
                   </div>
 
@@ -3171,7 +3157,9 @@ function AuditReportContent() {
                     className="mt-4 max-w-xl text-[15px] leading-relaxed text-slate-500"
                     style={{ animation: "fadeUp 600ms ease-out 520ms both" }}
                   >
-                    {band.description}
+                    {configuredProductScore === null
+                      ? heroBand.description
+                      : `AIBizmod's configured product score for this domain is ${configuredProductScore}/100.`}
                   </p>
 
                   {/* 6. Quick Stats Row */}
