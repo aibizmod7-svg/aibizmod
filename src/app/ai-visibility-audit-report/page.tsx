@@ -2753,7 +2753,13 @@ function AuditReportContent() {
       };
       const firstBatch = await requestBatch();
       if (!firstBatch.crawlBatch) {
-        if (typeof firstBatch.score !== "number" || !Array.isArray(firstBatch.categoryDetails)) {
+        const scoreBreakDown = firstBatch.scoreBreakDown ?? firstBatch.scoreBreakdown;
+        if (
+          typeof firstBatch.score !== "number" ||
+          !scoreBreakDown ||
+          typeof scoreBreakDown !== "object" ||
+          Array.isArray(scoreBreakDown)
+        ) {
           throw new Error("The audit service returned an unsupported response. Please try again later.");
         }
         const legacyPages = Array.isArray(firstBatch.pagesAnalyzed) ? firstBatch.pagesAnalyzed : [];
@@ -2763,15 +2769,24 @@ function AuditReportContent() {
         const failedPages = legacyPages.filter((page: PageScore) => page.status === "inaccessible").length;
         setResult({
           ...firstBatch,
+          band: ["excellent", "good", "fair", "poor", "critical"].includes(firstBatch.band)
+            ? firstBatch.band
+            : firstBatch.score >= 75 ? "excellent" : firstBatch.score >= 60 ? "good" : firstBatch.score >= 45 ? "fair" : firstBatch.score >= 20 ? "poor" : "critical",
+          citability: typeof firstBatch.citability === "number" ? firstBatch.citability : 0,
+          scoreBreakDown,
+          categoryDetails: [],
+          pagesAnalyzed: legacyPages,
+          recommendations: Array.isArray(firstBatch.recommendations) ? firstBatch.recommendations : [],
+          checkedAt: typeof firstBatch.checkedAt === "string" ? firstBatch.checkedAt : new Date().toISOString(),
           crawlSummary: {
             batchSize: legacyPageCount,
-            pagesDiscovered: legacyPageCount,
-            pagesAttempted: legacyPageCount,
-            pagesAnalyzed: analyzedPages || legacyPageCount,
-            failedPages,
-            skippedByRobots: 0,
+            pagesDiscovered: legacyPageCount || "Not reported",
+            pagesAttempted: legacyPageCount || "Not reported",
+            pagesAnalyzed: analyzedPages || legacyPageCount || "Not reported",
+            failedPages: legacyPages.length ? failedPages : "Not reported",
+            skippedByRobots: "Not reported",
             truncated: true,
-            subdomainsIncluded: true,
+            subdomainsIncluded: false,
             complete: false,
             legacyApi: true,
           },
@@ -3061,9 +3076,13 @@ function AuditReportContent() {
           const heroScore = configuredProductScore ?? result.score;
           const heroBandKey = heroScore >= 75 ? "excellent" : heroScore >= 60 ? "good" : heroScore >= 45 ? "fair" : heroScore >= 20 ? "poor" : "critical";
           const heroBand = BAND_META[heroBandKey] || BAND_META.poor;
-          const criticalCount = Array.isArray(result.criticalIssues) ? result.criticalIssues.filter((i: Issue) => i.severity === "critical").length : 0;
-          const quickWinCount = Array.isArray(result.quickWins) ? result.quickWins.length : 0;
-          const platformCount = Array.isArray(result.aiPlatforms) ? result.aiPlatforms.length : 5;
+          const criticalCount = Array.isArray(result.criticalIssues)
+            ? result.criticalIssues.filter((i: Issue) => i.severity === "critical").length
+            : Array.isArray(result.issues)
+              ? result.issues.filter((i: Issue) => i.severity === "critical").length
+              : null;
+          const quickWinCount = Array.isArray(result.quickWins) ? result.quickWins.length : null;
+          const platformCount = Array.isArray(result.aiPlatforms) ? result.aiPlatforms.length : null;
           const faviconUrl = getFaviconUrl(displayDomain || domain);
 
           return (
@@ -3205,7 +3224,7 @@ function AuditReportContent() {
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50">
                         <AlertTriangle className="h-4 w-4 text-red-500" />
                       </div>
-                      <span className="mt-2 text-2xl font-bold text-slate-900">{criticalCount}</span>
+                      <span className="mt-2 text-2xl font-bold text-slate-900">{criticalCount ?? "N/A"}</span>
                       <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider leading-tight text-center">Critical Issues</span>
                     </div>
 
@@ -3213,7 +3232,7 @@ function AuditReportContent() {
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
                         <Zap className="h-4 w-4 text-emerald-500" />
                       </div>
-                      <span className="mt-2 text-2xl font-bold text-slate-900">{quickWinCount}</span>
+                      <span className="mt-2 text-2xl font-bold text-slate-900">{quickWinCount ?? "N/A"}</span>
                       <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Quick Wins</span>
                     </div>
 
@@ -3221,7 +3240,7 @@ function AuditReportContent() {
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50">
                         <Brain className="h-4 w-4 text-cyan-500" />
                       </div>
-                      <span className="mt-2 text-2xl font-bold text-slate-900">{platformCount}</span>
+                      <span className="mt-2 text-2xl font-bold text-slate-900">{platformCount ?? "N/A"}</span>
                       <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Platforms</span>
                     </div>
                   </div>
