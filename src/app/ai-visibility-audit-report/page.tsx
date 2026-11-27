@@ -2215,13 +2215,18 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           <SectionHeader
             icon={<Globe className="h-5 w-5" />}
             title="Site Crawl Coverage"
-            subtitle={`The audit discovers indexable pages from XML sitemaps and internal links, then scores them in batches of ${result.crawlSummary.batchSize}.`}
+            subtitle={result.crawlSummary.legacyApi
+              ? "The audit service returned a legacy result without full-site crawl progress."
+              : `The audit discovers indexable pages from XML sitemaps and internal links, then scores them in batches of ${result.crawlSummary.batchSize}.`}
             iconGradient="from-cyan-500 to-teal-600"
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {[
               { label: "Pages Scored", value: result.crawlSummary.pagesAnalyzed },
-              { label: "URLs Discovered", value: result.crawlSummary.pagesDiscovered },
+              {
+                label: result.crawlSummary.legacyApi ? "Pages Returned" : "URLs Discovered",
+                value: result.crawlSummary.pagesDiscovered,
+              },
               { label: "Pages Attempted", value: result.crawlSummary.pagesAttempted },
               { label: "Blocked by Robots", value: result.crawlSummary.skippedByRobots },
               { label: "Fetch Failures", value: result.crawlSummary.failedPages },
@@ -2233,9 +2238,13 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
             ))}
           </div>
           <p className="mt-4 text-xs text-slate-500">
-            {result.crawlSummary.subdomainsIncluded ? "Subdomains were included." : "Only the submitted hostname was included."}
-            {" "}Overall score uses equal-weight category averages across successfully analyzed pages.
-            {result.crawlSummary.truncated && " The crawl reached a safety limit, so additional URLs may not be included."}
+            {result.crawlSummary.legacyApi
+              ? "This result may not cover the whole site. Deploy the updated audit API to enable full-site batching."
+              : <>
+                  {result.crawlSummary.subdomainsIncluded ? "Subdomains were included." : "Only the submitted hostname was included."}
+                  {" "}Overall score uses equal-weight category averages across successfully analyzed pages.
+                  {result.crawlSummary.truncated && " The crawl reached a safety limit, so additional URLs may not be included."}
+                </>}
           </p>
         </div>
       )}
@@ -2743,7 +2752,32 @@ function AuditReportContent() {
         return data;
       };
       const firstBatch = await requestBatch();
-      if (!firstBatch.crawlBatch) throw new Error("The audit response did not include crawl progress.");
+      if (!firstBatch.crawlBatch) {
+        if (typeof firstBatch.score !== "number" || !Array.isArray(firstBatch.categoryDetails)) {
+          throw new Error("The audit service returned an unsupported response. Please try again later.");
+        }
+        const legacyPages = Array.isArray(firstBatch.pagesAnalyzed) ? firstBatch.pagesAnalyzed : [];
+        const legacyPageCount = legacyPages.length ||
+          (typeof firstBatch.pagesAnalyzed === "number" ? firstBatch.pagesAnalyzed : 0);
+        const analyzedPages = legacyPages.filter((page: PageScore) => page.status !== "inaccessible").length;
+        const failedPages = legacyPages.filter((page: PageScore) => page.status === "inaccessible").length;
+        setResult({
+          ...firstBatch,
+          crawlSummary: {
+            batchSize: legacyPageCount,
+            pagesDiscovered: legacyPageCount,
+            pagesAttempted: legacyPageCount,
+            pagesAnalyzed: analyzedPages || legacyPageCount,
+            failedPages,
+            skippedByRobots: 0,
+            truncated: true,
+            subdomainsIncluded: true,
+            complete: false,
+            legacyApi: true,
+          },
+        });
+        return;
+      }
 
       const batchResults: AuditResult[] = [];
       const coverage = {
