@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { POST as runGeoAudit } from "../geo-audit/route";
+import { POST as runGeoAudit } from "../api/geo-audit/route";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
