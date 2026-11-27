@@ -3083,6 +3083,9 @@ function AuditReportContent() {
               : null;
           const quickWinCount = Array.isArray(result.quickWins) ? result.quickWins.length : null;
           const platformCount = Array.isArray(result.aiPlatforms) ? result.aiPlatforms.length : null;
+          const recommendationCount = Array.isArray(result.recommendations) ? result.recommendations.length : null;
+          const isLegacyResult = result.crawlSummary?.legacyApi === true;
+          const showRecommendationsInstead = quickWinCount === null && isLegacyResult && recommendationCount !== null;
           const faviconUrl = getFaviconUrl(displayDomain || domain);
 
           return (
@@ -3224,24 +3227,30 @@ function AuditReportContent() {
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50">
                         <AlertTriangle className="h-4 w-4 text-red-500" />
                       </div>
-                      <span className="mt-2 text-2xl font-bold text-slate-900">{criticalCount ?? "N/A"}</span>
+                      <span className="mt-2 text-2xl font-bold text-slate-900">{criticalCount ?? (isLegacyResult ? "—" : "N/A")}</span>
                       <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider leading-tight text-center">Critical Issues</span>
+                      {criticalCount === null && isLegacyResult && <span className="mt-1 text-[9px] text-slate-400">Not returned by API</span>}
                     </div>
 
                     <div className="flex flex-col items-center rounded-2xl border border-slate-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur-sm">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
                         <Zap className="h-4 w-4 text-emerald-500" />
                       </div>
-                      <span className="mt-2 text-2xl font-bold text-slate-900">{quickWinCount ?? "N/A"}</span>
-                      <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Quick Wins</span>
+                      <span className="mt-2 text-2xl font-bold text-slate-900">
+                        {quickWinCount ?? (showRecommendationsInstead ? recommendationCount : isLegacyResult ? "—" : "N/A")}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+                        {showRecommendationsInstead ? "Recommendations" : "Quick Wins"}
+                      </span>
                     </div>
 
                     <div className="flex flex-col items-center rounded-2xl border border-slate-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur-sm">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50">
                         <Brain className="h-4 w-4 text-cyan-500" />
                       </div>
-                      <span className="mt-2 text-2xl font-bold text-slate-900">{platformCount ?? "N/A"}</span>
+                      <span className="mt-2 text-2xl font-bold text-slate-900">{platformCount ?? (isLegacyResult ? "—" : "N/A")}</span>
                       <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Platforms</span>
+                      {platformCount === null && isLegacyResult && <span className="mt-1 text-[9px] text-slate-400">Not scored by API</span>}
                     </div>
                   </div>
 
