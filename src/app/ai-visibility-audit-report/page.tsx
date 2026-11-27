@@ -290,6 +290,15 @@ type AuditResult = Record<string, any>;
 
 const AUDIT_CACHE_TTL_MS = 5 * 60 * 1000;
 
+function humanizeAuditKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\bai\b/gi, "AI")
+    .replace(/\bllms?\b/gi, "LLM")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function readCachedAudit(domain: string): AuditResult | null {
   const key = `audit-cache-${domain}`;
   try {
@@ -732,11 +741,13 @@ function CategoryCard({ detail, index }: { detail: CategoryDetail; index: number
         </div>
       </div>
 
-      <div data-pdf-expand className={expanded ? "border-t border-slate-100 bg-slate-50/50 p-4 space-y-1.5" : "hidden"}>
-        {(detail.subChecks ?? []).map((sc: any) => (
-          <SubCheckRow key={sc.key} check={sc} />
-        ))}
-      </div>
+      {expanded && (
+        <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-1.5">
+          {(detail.subChecks ?? []).map((sc: any) => (
+            <SubCheckRow key={sc.key} check={sc} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -834,7 +845,6 @@ function IssueCard({ issue }: { issue: Issue }) {
           </div>
           <p className="text-xs text-slate-700 leading-relaxed mb-2">{issue.description}</p>
           <button
-            data-pdf-hide
             onClick={() => setExpanded(!expanded)}
             className="text-[11px] font-medium text-slate-600 hover:text-slate-900 transition inline-flex items-center gap-1"
           >
@@ -842,22 +852,24 @@ function IssueCard({ issue }: { issue: Issue }) {
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
 
-          <div data-pdf-expand className={expanded ? "mt-3 space-y-2.5 pt-3 border-t border-black/5" : "hidden"}>
-            <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Why It Matters</span>
-              <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.whyItMatters}</p>
+          {expanded && (
+            <div className="mt-3 space-y-2.5 pt-3 border-t border-black/5">
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Why It Matters</span>
+                <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.whyItMatters}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Recommended Fix</span>
+                <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.recommendedFix}</p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-current/10 px-2.5 py-1">
+                <TrendingUp className="h-3 w-3 text-emerald-600" />
+                <span className="text-[11px] font-semibold text-emerald-700">
+                  +{issue.expectedScoreIncrease} pts expected gain
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Recommended Fix</span>
-              <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.recommendedFix}</p>
-            </div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-current/10 px-2.5 py-1">
-              <TrendingUp className="h-3 w-3 text-emerald-600" />
-              <span className="text-[11px] font-semibold text-emerald-700">
-                +{issue.expectedScoreIncrease} pts expected gain
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -980,18 +992,20 @@ function RoadmapPhaseCard({ phase, index }: { phase: RoadmapPhase; index: number
         </div>
       </button>
 
-      <div data-pdf-expand className={expanded ? "border-t border-slate-100 px-5 pb-5 pt-4" : "hidden"}>
-        <div className="space-y-2">
-          {phase.tasks.map((task, i) => (
-            <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
-              <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-[9px] font-bold text-slate-400">{i + 1}</span>
+      {expanded && (
+        <div className="border-t border-slate-100 px-5 pb-5 pt-4">
+          <div className="space-y-2">
+            {phase.tasks.map((task, i) => (
+              <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+                <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-[9px] font-bold text-slate-400">{i + 1}</span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed">{task}</p>
               </div>
-              <p className="text-xs text-slate-700 leading-relaxed">{task}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1368,7 +1382,6 @@ const SAVE_AUDIT_REPORT = gql`
 `;
 
 function AuditReport({ result, domain }: { result: AuditResult; domain: string }) {
-  const reportRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const { isAuthenticated, user, logout } = useAibizmodAuth();
@@ -1443,95 +1456,73 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
   const favicon = getFaviconUrl(domain);
 
   const exportPDF = async () => {
-    if (!reportRef.current) return;
     setExporting(true);
     setExportError(null);
     try {
-      const html2canvas = (await import("html2canvas")).default;
+      const reportData: AuditResult = isAuthenticated
+        ? result
+        : {
+            score: result.score,
+            band: result.band,
+            citability: result.citability,
+            scoreBreakDown: result.scoreBreakDown ?? result.scoreBreakdown,
+            categoryDetails: result.categoryDetails,
+            checkedAt: result.checkedAt,
+          };
       const { jsPDF } = await import("jspdf");
-      await document.fonts.ready;
-
-      const logoImage = new Image();
-      logoImage.src = "/logo.svg";
-      await logoImage.decode();
+      const logoResponse = await fetch("/logo.svg");
+      if (!logoResponse.ok) throw new Error("Unable to load the report logo.");
+      const logoSvg = await logoResponse.text();
       const logoCanvas = document.createElement("canvas");
       logoCanvas.width = 960;
       logoCanvas.height = 240;
       const logoContext = logoCanvas.getContext("2d");
       if (!logoContext) throw new Error("Unable to create the PDF logo canvas.");
-      logoContext.drawImage(logoImage, 0, 0, logoCanvas.width, logoCanvas.height);
+      const svgImage = new Image();
+      svgImage.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(logoSvg)}`;
+      await svgImage.decode();
+      logoContext.drawImage(svgImage, 0, 0, logoCanvas.width, logoCanvas.height);
       const logoData = logoCanvas.toDataURL("image/png");
+
       logoContext.clearRect(0, 0, logoCanvas.width, logoCanvas.height);
-      logoContext.globalAlpha = 0.055;
-      logoContext.drawImage(logoImage, 0, 0, logoCanvas.width, logoCanvas.height);
+      const watermarkSvg = logoSvg
+        .replace(/<rect\b[^>]*\/>/, "")
+        .replace(/fill="#FFFFFF"/g, 'fill="#0A1628"')
+        .replace(/fill="#64748B"/g, 'fill="#0A1628"');
+      const watermarkImage = new Image();
+      watermarkImage.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(watermarkSvg)}`;
+      await watermarkImage.decode();
+      logoContext.globalAlpha = 0.07;
+      logoContext.drawImage(watermarkImage, 0, 0, logoCanvas.width, logoCanvas.height);
       const watermarkData = logoCanvas.toDataURL("image/png");
 
       const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 14;
-      const contentTop = 24;
-      const contentBottom = pageHeight - 21;
+      const margin = 16;
       const contentWidth = pageWidth - margin * 2;
-      const sections = Array.from(reportRef.current.children).filter(
-        (section) =>
-          !section.hasAttribute("data-pdf-hide") &&
-          !section.hasAttribute("data-pdf-exclude"),
-      );
-      let cursorY = contentTop;
-      let hasContentOnPage = false;
-
-      for (const section of sections) {
-        const canvas = await html2canvas(section as HTMLElement, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          ignoreElements: (element) =>
-            element.hasAttribute("data-html2canvas-ignore") ||
-            element.hasAttribute("data-pdf-hide"),
-          onclone: (clonedDocument) => {
-            clonedDocument.querySelectorAll("[data-pdf-expand]").forEach((element) => {
-              element.classList.remove("hidden");
-            });
-          },
-        });
-        if (canvas.width === 0 || canvas.height === 0) continue;
-
-        const imageData = canvas.toDataURL("image/jpeg", 0.92);
-        const maxImageHeight = contentBottom - contentTop;
-        const widthScale = contentWidth / canvas.width;
-        const heightScale = maxImageHeight / canvas.height;
-        const scale = Math.min(widthScale, heightScale);
-        const imageWidth = canvas.width * scale;
-        const imageHeight = canvas.height * scale;
-
-        if (hasContentOnPage && cursorY + imageHeight > contentBottom) {
-          pdf.addPage();
-          cursorY = contentTop;
-          hasContentOnPage = false;
-        }
-
-        pdf.addImage(
-          imageData,
-          "JPEG",
-          margin + (contentWidth - imageWidth) / 2,
-          cursorY,
-          imageWidth,
-          imageHeight,
-          undefined,
-          "FAST",
-        );
-        cursorY += imageHeight + 5;
-        hasContentOnPage = true;
-      }
-
-      if (!hasContentOnPage && pdf.getNumberOfPages() === 1) {
-        throw new Error("The report has no printable content.");
-      }
-
-      const totalPages = pdf.getNumberOfPages();
-      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-        pdf.setPage(pageNumber);
+      const bottomMargin = 21;
+      const pageBottom = pageHeight - bottomMargin;
+      const breakdown = reportData.scoreBreakDown ?? reportData.scoreBreakdown;
+      const hasRecord = (value: unknown): value is Record<string, any> =>
+        typeof value === "object" && value !== null && !Array.isArray(value);
+      const formatValue = (value: any): string => {
+        if (value === null || value === undefined || value === "") return "Not provided";
+        if (typeof value === "boolean") return value ? "Yes" : "No";
+        if (typeof value === "object") return JSON.stringify(value);
+        return String(value)
+          .replace(/[–—]/g, "-")
+          .replace(/[‘’]/g, "'")
+          .replace(/[“”]/g, '"')
+          .replace(/•/g, "-")
+          .replace(/→/g, "->")
+          .replace(/…/g, "...");
+      };
+      let cursorY = 30;
+      let pageStarted = false;
+      const addPage = () => {
+        if (pageStarted) pdf.addPage();
+        pageStarted = true;
         pdf.addImage(
           watermarkData,
           "PNG",
@@ -1540,7 +1531,14 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           96,
           24,
         );
-        pdf.addImage(logoData, "PNG", margin, 7, 40, 10);
+        pdf.addImage(
+          logoData,
+          "PNG",
+          margin,
+          7,
+          40,
+          10,
+        );
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(8);
         pdf.setTextColor(15, 23, 42);
@@ -1550,14 +1548,208 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
         pdf.text(displayDomain, pageWidth - margin, 15, { align: "right" });
         pdf.setDrawColor(226, 232, 240);
         pdf.line(margin, 20, pageWidth - margin, 20);
+        cursorY = 29;
+      };
+      const ensureSpace = (height: number) => {
+        if (cursorY + height > pageBottom) addPage();
+      };
+      const writeText = (
+        text: string,
+        options: {
+          size?: number;
+          bold?: boolean;
+          color?: [number, number, number];
+          indent?: number;
+          font?: "helvetica" | "courier";
+        } = {},
+      ) => {
+        const { size = 9, bold = false, color = [51, 65, 85], indent = 0, font = "helvetica" } = options;
+        const safeText = formatValue(text);
+        const lines = pdf.splitTextToSize(safeText, contentWidth - indent);
+        const lineHeight = size * 0.48;
+        for (const line of lines) {
+          ensureSpace(lineHeight);
+          pdf.setFont(font, bold ? "bold" : "normal");
+          pdf.setFontSize(size);
+          pdf.setTextColor(...color);
+          pdf.text(line, margin + indent, cursorY);
+          cursorY += lineHeight;
+        }
+      };
+      const addSection = (title: string) => {
+        ensureSpace(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(12);
+        pdf.setTextColor(15, 23, 42);
+        pdf.text(title, margin, cursorY);
+        cursorY += 4;
+        pdf.setDrawColor(226, 232, 240);
+        pdf.line(margin, cursorY, pageWidth - margin, cursorY);
+        cursorY += 5;
+      };
+      const addRecord = (record: Record<string, any>, depth = 0) => {
+        for (const [key, value] of Object.entries(record)) {
+          const label = humanizeAuditKey(key);
+          const indent = Math.min(depth * 3, 18);
+          if (Array.isArray(value)) {
+            writeText(`${label}:`, { bold: true, indent });
+            if (value.length === 0) {
+              writeText("None returned by API.", { indent: indent + 3 });
+            } else {
+              for (const item of value) {
+                if (hasRecord(item)) addRecord(item, depth + 1);
+                else writeText(`- ${formatValue(item)}`, { indent: indent + 3 });
+              }
+            }
+          } else if (hasRecord(value)) {
+            writeText(`${label}:`, { bold: true, indent });
+            addRecord(value, depth + 1);
+          } else {
+            writeText(`${label}: ${formatValue(value)}`, { indent });
+          }
+        }
+        cursorY += 1;
+      };
+      const addArraySection = (title: string, value: unknown) => {
+        if (!Array.isArray(value)) return;
+        addSection(`${title} (${value.length})`);
+        if (value.length === 0) {
+          writeText("No items returned by the API.", { color: [100, 116, 139] });
+          cursorY += 2;
+          return;
+        }
+        value.forEach((item, index) => {
+          if (hasRecord(item)) {
+            const heading = item.title || item.label || item.name || item.action || item.month || item.entity;
+            writeText(`${index + 1}. ${heading ? formatValue(heading) : `${title} entry`}`, {
+              bold: true,
+              color: [8, 145, 178],
+            });
+            addRecord(item, 1);
+          } else {
+            writeText(`${index + 1}. ${formatValue(item)}`, { indent: 2 });
+          }
+          cursorY += 2;
+        });
+      };
+
+      addPage();
+      addSection("Audit Summary");
+      const scoreText = reportData.score !== undefined ? `${formatValue(reportData.score)} / 100` : "Not provided";
+      const citabilityText = reportData.citability !== undefined
+        ? `${formatValue(reportData.citability)} / 100`
+        : "Not provided";
+      ensureSpace(30);
+      pdf.setFillColor(239, 249, 251);
+      pdf.setDrawColor(207, 238, 243);
+      pdf.roundedRect(margin, cursorY, contentWidth, 25, 3, 3, "FD");
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(8, 145, 178);
+      pdf.setFontSize(20);
+      pdf.text(scoreText, margin + 6, cursorY + 10);
+      pdf.setFontSize(9);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text(`AI Visibility: ${formatValue(reportData.band)}`, margin + 6, cursorY + 17);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(51, 65, 85);
+      pdf.text(`Citability: ${citabilityText}`, margin + 92, cursorY + 11);
+      pdf.text(`Checked: ${formatValue(reportData.checkedAt)}`, margin + 92, cursorY + 17);
+      cursorY += 31;
+
+      const issueData = Array.isArray(reportData.issues)
+        ? reportData.issues
+        : Array.isArray(reportData.criticalIssues)
+          ? reportData.criticalIssues
+          : null;
+      const breakdownEntries = hasRecord(breakdown) ? Object.entries(breakdown) : [];
+      const categoryCount = Array.isArray(reportData.categoryDetails) && reportData.categoryDetails.length > 0
+        ? String(reportData.categoryDetails.length)
+        : breakdownEntries.length
+          ? `${breakdownEntries.length} score components`
+          : "Not provided";
+      writeText(`Categories: ${categoryCount}`);
+      writeText(`Issues: ${isAuthenticated ? issueData === null ? "Not provided by API" : issueData.length : "Sign in to unlock"}`);
+      writeText(`Recommendations: ${isAuthenticated ? Array.isArray(reportData.recommendations) ? reportData.recommendations.length : "Not provided by API" : "Sign in to unlock"}`);
+      cursorY += 3;
+
+      if (breakdownEntries.length > 0) {
+        const numericTotal = breakdownEntries.reduce(
+          (total, [, value]) => total + (typeof value === "number" ? value : 0),
+          0,
+        );
+        const arePointContributions =
+          typeof reportData.score === "number" && Math.round(numericTotal) === reportData.score;
+        addSection(arePointContributions ? "Score Point Contributions" : "Score Component Values");
+        for (const [key, value] of breakdownEntries) {
+          const suffix = typeof value === "number" ? (arePointContributions ? " points" : " / 100") : "";
+          writeText(`${humanizeAuditKey(key)}: ${formatValue(value)}${suffix}`, { indent: 2 });
+        }
+        cursorY += 2;
+      }
+
+      addArraySection("Category Details and Sub-checks", reportData.categoryDetails);
+      addArraySection("Issues and Findings", issueData);
+      addArraySection("Quick Wins", reportData.quickWins);
+      addArraySection("AI Platform Compatibility", reportData.aiPlatforms);
+      addArraySection("Entity Recognition", reportData.entities);
+      addArraySection("Content Metrics", reportData.contentMetrics);
+      addArraySection("Priority Roadmap", reportData.roadmap);
+      addArraySection("Pages Analyzed", reportData.pagesAnalyzed);
+      addArraySection("Recommendations", reportData.recommendations);
+
+      const missingData = [
+        (!Array.isArray(reportData.categoryDetails) || reportData.categoryDetails.length === 0) &&
+          "detailed categories and sub-checks",
+        issueData === null && "issue severity and issue-level fixes",
+        !Array.isArray(reportData.quickWins) && "quick wins",
+        !Array.isArray(reportData.aiPlatforms) && "AI platform scores",
+        !Array.isArray(reportData.entities) && "entity checks",
+        !Array.isArray(reportData.contentMetrics) && "content metrics",
+        !Array.isArray(reportData.roadmap) && "priority roadmap",
+        !Array.isArray(reportData.pagesAnalyzed) && "page-level analysis",
+      ].filter(Boolean) as string[];
+      if (isAuthenticated && missingData.length > 0) {
+        addSection("API Data Availability");
+        writeText(
+          `This API response did not include: ${missingData.join(", ")}. These fields are marked unavailable rather than shown as zero.`,
+          { color: [100, 116, 139] },
+        );
+      }
+
+      if (!isAuthenticated) {
+        addSection("Full Report Access");
+        writeText("Detailed findings and recommendations are available to signed-in users and are intentionally excluded from this download.", {
+          color: [100, 116, 139],
+        });
+      }
+
+      addSection(isAuthenticated ? "Complete API Response" : "Public API Data Included");
+      writeText(isAuthenticated
+        ? "The following appendix preserves every field returned for this audit."
+        : "This appendix includes the fields available in the public report. Sign in to download the full audit data.", {
+        color: [100, 116, 139],
+      });
+      const rawResponse = JSON.stringify(reportData, null, 2);
+      for (const line of rawResponse.split("\n")) {
+        writeText(line || " ", { size: 7, font: "courier", color: [71, 85, 105] });
+      }
+
+      const totalPages = pdf.getNumberOfPages();
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+        pdf.setPage(pageNumber);
+        pdf.setDrawColor(226, 232, 240);
         pdf.line(margin, pageHeight - 16, pageWidth - margin, pageHeight - 16);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(100, 116, 139);
         pdf.setFontSize(8);
         pdf.text("Prepared by Aibizmod - AI Visibility Audit", margin, pageHeight - 9);
         pdf.text(`Page ${pageNumber} of ${totalPages}`, pageWidth - margin, pageHeight - 9, {
           align: "right",
         });
       }
-      pdf.save(`ai-visibility-report-${displayDomain}.pdf`);
+
+      const safeDomain = displayDomain.replace(/[^a-zA-Z0-9.-]/g, "-");
+      pdf.save(`ai-visibility-report-${safeDomain}.pdf`);
     } catch (e) {
       console.error("[Aibizmod] Failed to export audit PDF:", e);
       setExportError("We couldn't create the PDF. Please try again, or use your browser's Print command to save the report as a PDF.");
@@ -1566,8 +1758,29 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
   };
 
   // Citability checks from API result
-  const citabilityCategory = result.categoryDetails?.find((c: any) => c.key === "citability");
-  const auditIssues = Array.isArray(result.issues) ? result.issues : result.criticalIssues ?? [];
+  const citabilityCategory = Array.isArray(result.categoryDetails)
+    ? result.categoryDetails.find((c: any) => c.key === "citability")
+    : null;
+  const scoreBreakdown = result.scoreBreakDown ?? result.scoreBreakdown;
+  const scoreBreakdownEntries =
+    scoreBreakdown && typeof scoreBreakdown === "object" && !Array.isArray(scoreBreakdown)
+      ? Object.entries(scoreBreakdown)
+      : [];
+  const scoreBreakdownTotal = scoreBreakdownEntries.reduce(
+    (total, [, value]) => total + (typeof value === "number" ? value : 0),
+    0,
+  );
+  const breakdownIsPointBased =
+    typeof result.score === "number" && Math.round(scoreBreakdownTotal) === result.score;
+  const issueDataAvailable =
+    Array.isArray(result.issues) || Array.isArray(result.criticalIssues);
+  const auditIssues = Array.isArray(result.issues)
+    ? result.issues
+    : Array.isArray(result.criticalIssues)
+      ? result.criticalIssues
+      : [];
+  const hasRecommendationData =
+    Array.isArray(result.recommendations) || Array.isArray(result.quickWins);
   const criticalCount = auditIssues.filter((issue: Issue) => issue.severity === "critical").length;
   const highIssueCount = auditIssues.filter((issue: Issue) => issue.severity === "high").length;
   const mediumIssueCount = auditIssues.filter((issue: Issue) => issue.severity === "medium").length;
@@ -1577,7 +1790,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
 
   return (
     <ScrollReveal>
-    <div className="space-y-6" ref={reportRef}>
+    <div className="space-y-6">
 
       {/* ── Domain header ─────────────────────────────────────────────────── */}
       <div className="group relative bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-all">
@@ -1585,7 +1798,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
         <div className="relative flex flex-col sm:flex-row items-center gap-4">
           <div className="flex items-center gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {favicon && <img data-html2canvas-ignore src={favicon} alt={`${displayDomain} favicon`} width={44} height={44} className="w-11 h-11 rounded-xl border border-slate-200 shadow-sm" />}
+            {favicon && <img src={favicon} alt={`${displayDomain} favicon`} width={44} height={44} className="w-11 h-11 rounded-xl border border-slate-200 shadow-sm" />}
             <div>
               <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: "Satoshi, sans-serif" }}>{displayDomain}</h1>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -1599,7 +1812,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
               </div>
             </div>
           </div>
-          <div data-pdf-hide className="sm:ml-auto flex items-center gap-3">
+          <div className="sm:ml-auto flex items-center gap-3">
             <button
               onClick={exportPDF}
               disabled={exporting}
@@ -1618,14 +1831,14 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {exportError && (
-        <p data-pdf-hide role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {exportError}
         </p>
       )}
 
       {/* ── Hosted report link ────────────────────────────────────────────── */}
       {hostedReportId && (
-        <div data-pdf-hide className="flex flex-col lg:flex-row lg:items-center gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Link2 className="h-4 w-4 text-cyan-600 flex-shrink-0" />
             <p className="text-xs sm:text-sm text-slate-700">
@@ -1715,21 +1928,35 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           <div className="grid grid-cols-2 gap-3">
             <StatTile
               icon={<Layers className="h-4 w-4 text-cyan-600" />}
-              label="Categories Analyzed"
-              value={result.categoryDetails?.length ?? 0}
+              label={
+                Array.isArray(result.categoryDetails) && result.categoryDetails.length > 0
+                  ? "Categories Analyzed"
+                  : "Score Components"
+              }
+              value={
+                Array.isArray(result.categoryDetails) && result.categoryDetails.length > 0
+                  ? result.categoryDetails.length
+                  : scoreBreakdownEntries.length || "N/A"
+              }
               color="text-slate-900"
             />
             <StatTile
               icon={<AlertTriangle className="h-4 w-4 text-red-500" />}
               label="Critical Issues"
-              value={criticalCount}
-              color={criticalCount > 0 ? "text-red-600" : "text-emerald-600"}
-              note={`${auditIssues.length} total issues`}
+              value={issueDataAvailable ? criticalCount : "N/A"}
+              color={!issueDataAvailable ? "text-slate-500" : criticalCount > 0 ? "text-red-600" : "text-emerald-600"}
+              note={issueDataAvailable ? `${auditIssues.length} total issues` : "Issue data not returned by API"}
             />
             <StatTile
               icon={<Sparkles className="h-4 w-4 text-amber-500" />}
               label="Recommendations"
-              value={auditIssues.length + (result.quickWins?.length ?? 0)}
+              value={
+                Array.isArray(result.recommendations)
+                  ? result.recommendations.length
+                  : hasRecommendationData
+                    ? auditIssues.length + (result.quickWins?.length ?? 0)
+                    : "N/A"
+              }
               color="text-slate-900"
             />
             <StatTile
@@ -1748,7 +1975,11 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
         <SectionHeader
           icon={<BarChart3 className="h-5 w-5" />}
           title="Weighted Category Breakdown"
-          subtitle="Enterprise scoring across 6 AI visibility categories — click any category to see detailed sub-checks"
+          subtitle={
+            Array.isArray(result.categoryDetails) && result.categoryDetails.length > 0
+              ? "Enterprise scoring across AI visibility categories — expand a category to see its detailed sub-checks"
+              : "Score components returned by the audit API"
+          }
           iconGradient="from-blue-500 to-indigo-600"
         />
 
@@ -1768,15 +1999,35 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {(result.categoryDetails ?? []).map((detail: any, i: number) => (
-            <CategoryCard key={detail.key} detail={detail} index={i} />
-          ))}
-        </div>
+        {Array.isArray(result.categoryDetails) && result.categoryDetails.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {result.categoryDetails.map((detail: any, i: number) => (
+              <CategoryCard key={detail.key} detail={detail} index={i} />
+            ))}
+          </div>
+        ) : scoreBreakdownEntries.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {scoreBreakdownEntries.map(([key, value]) => (
+              <div key={key} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="text-xs font-bold text-slate-800">{humanizeAuditKey(key)}</div>
+                <div className="mt-2 text-lg font-bold text-cyan-700">
+                  {String(value)} {breakdownIsPointBased ? "pts" : "/100"}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  {breakdownIsPointBased ? "Contribution to overall score" : "Component score"}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
+            Category details and score components were not included in this API response.
+          </p>
+        )}
       </div>
 
       {!isAuthenticated && (
-        <div data-pdf-hide className="flex items-center justify-center py-8">
+        <div className="flex items-center justify-center py-8">
           <button
             onClick={() => setShowSignInModal(true)}
             data-aibizmod-track="View Full Report CTA"
@@ -1789,7 +2040,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       )}
 
       {isAuthenticated && (
-        <div data-pdf-hide className="flex items-center justify-center py-6">
+        <div className="flex items-center justify-center py-6">
           <div className="inline-flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-slate-900">
@@ -1812,7 +2063,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       <SignInModal isOpen={showSignInModal} onClose={() => setShowSignInModal(false)} />
 
       {/* ── SECTION 3: AI Platform Compatibility ───────────────────────────── */}
-      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Globe className="h-5 w-5" />}
           title="AI Platform Compatibility"
@@ -1826,7 +2077,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
 
       {/* ── SECTION 4: AI Citability Deep Dive ────────────────────────────── */}
       {citabilityCategory && (
-        <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+        <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<BookOpen className="h-5 w-5" />}
             title="AI Citability Deep Dive"
@@ -1842,7 +2093,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       )}
 
       {/* ── SECTION 5: Entity Recognition ─────────────────────────────────── */}
-      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Network className="h-5 w-5" />}
           title="Entity Recognition & Knowledge Graph"
@@ -1865,7 +2116,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── SECTION 6: Content Quality Analysis ───────────────────────────── */}
-      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<FileText className="h-5 w-5" />}
           title="Content Quality Analysis"
@@ -1879,7 +2130,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
 
       {/* ── SECTION 7: Critical Issues ─────────────────────────────────────── */}
       {auditIssues.length > 0 ? (
-        <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+        <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<AlertTriangle className="h-5 w-5" />}
             title="Issues & Recommendations"
@@ -1893,15 +2144,50 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800" role="status">
-          <CheckCircle className="h-5 w-5 shrink-0" />
-          No audit issues detected.
+        <div
+          className={cn(
+            "flex items-center gap-3 rounded-2xl border p-5 text-sm",
+            issueDataAvailable
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-slate-200 bg-slate-50 text-slate-600",
+          )}
+          role="status"
+        >
+          {issueDataAvailable
+            ? <CheckCircle className="h-5 w-5 shrink-0" />
+            : <Info className="h-5 w-5 shrink-0" />}
+          {issueDataAvailable
+            ? "No audit issues detected."
+            : "Issue details were not included in this API response. Review the available recommendations below."}
+        </div>
+      )}
+
+      {isAuthenticated && Array.isArray(result.recommendations) && result.recommendations.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm">
+          <SectionHeader
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Recommendations"
+            subtitle={`${result.recommendations.length} recommendations returned by the audit API`}
+            iconGradient="from-cyan-500 to-blue-600"
+          />
+          <ol className="space-y-3">
+            {result.recommendations.map((recommendation: any, index: number) => (
+              <li key={`${index}-${String(recommendation).slice(0, 40)}`} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-bold text-cyan-800">
+                  {index + 1}
+                </span>
+                <p className="text-sm leading-relaxed text-slate-700">
+                  {typeof recommendation === "string" ? recommendation : JSON.stringify(recommendation)}
+                </p>
+              </li>
+            ))}
+          </ol>
         </div>
       )}
 
       {/* ── SECTION 8: Quick Wins ─────────────────────────────────────────── */}
       {result.quickWins?.length > 0 && (
-        <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+        <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<Zap className="h-5 w-5" />}
             title="Quick Wins"
@@ -1917,7 +2203,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       )}
 
       {/* ── SECTION 9: Priority Roadmap ───────────────────────────────────── */}
-      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Target className="h-5 w-5" />}
           title="6-Month Priority Roadmap"
@@ -1945,7 +2231,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── SECTION 10: Key Pages Analyzed ────────────────────────────────── */}
-      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Globe className="h-5 w-5" />}
           title="Key Pages Analyzed"
@@ -1962,7 +2248,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── CTA ───────────────────────────────────────────────────────────── */}
-      <div data-pdf-hide className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 sm:p-10 text-center shadow-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 sm:p-10 text-center shadow-xl">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-transparent to-cyan-500/10" />
         <div className="relative">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white/80 text-xs font-medium mb-4">
