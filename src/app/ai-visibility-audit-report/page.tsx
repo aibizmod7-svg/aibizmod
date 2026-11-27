@@ -2732,7 +2732,7 @@ function AuditReportContent() {
     setAuditProgress("Discovering indexable pages...");
     try {
       const requestBatch = async (requestedUrls?: string[]) => {
-        const res = await fetch("/api/geo-audit", {
+        const res = await fetch("/api/geo-audit-v2", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
