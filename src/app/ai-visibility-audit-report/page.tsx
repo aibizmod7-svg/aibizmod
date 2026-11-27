@@ -732,13 +732,11 @@ function CategoryCard({ detail, index }: { detail: CategoryDetail; index: number
         </div>
       </div>
 
-      {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-1.5">
-          {(detail.subChecks ?? []).map((sc: any) => (
-            <SubCheckRow key={sc.key} check={sc} />
-          ))}
-        </div>
-      )}
+      <div data-pdf-expand className={expanded ? "border-t border-slate-100 bg-slate-50/50 p-4 space-y-1.5" : "hidden"}>
+        {(detail.subChecks ?? []).map((sc: any) => (
+          <SubCheckRow key={sc.key} check={sc} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -836,6 +834,7 @@ function IssueCard({ issue }: { issue: Issue }) {
           </div>
           <p className="text-xs text-slate-700 leading-relaxed mb-2">{issue.description}</p>
           <button
+            data-pdf-hide
             onClick={() => setExpanded(!expanded)}
             className="text-[11px] font-medium text-slate-600 hover:text-slate-900 transition inline-flex items-center gap-1"
           >
@@ -843,24 +842,22 @@ function IssueCard({ issue }: { issue: Issue }) {
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
 
-          {expanded && (
-            <div className="mt-3 space-y-2.5 pt-3 border-t border-black/5">
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Why It Matters</span>
-                <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.whyItMatters}</p>
-              </div>
-<div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Recommended Fix</span>
-                <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.recommendedFix}</p>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-current/10 px-2.5 py-1">
-                <TrendingUp className="h-3 w-3 text-emerald-600" />
-                <span className="text-[11px] font-semibold text-emerald-700">
-                  +{issue.expectedScoreIncrease} pts expected gain
-                </span>
-              </div>
+          <div data-pdf-expand className={expanded ? "mt-3 space-y-2.5 pt-3 border-t border-black/5" : "hidden"}>
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Why It Matters</span>
+              <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.whyItMatters}</p>
             </div>
-          )}
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Recommended Fix</span>
+              <p className="text-xs text-slate-700 mt-1 leading-relaxed">{issue.recommendedFix}</p>
+            </div>
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-current/10 px-2.5 py-1">
+              <TrendingUp className="h-3 w-3 text-emerald-600" />
+              <span className="text-[11px] font-semibold text-emerald-700">
+                +{issue.expectedScoreIncrease} pts expected gain
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -983,20 +980,18 @@ function RoadmapPhaseCard({ phase, index }: { phase: RoadmapPhase; index: number
         </div>
       </button>
 
-      {expanded && (
-        <div className="border-t border-slate-100 px-5 pb-5 pt-4">
-          <div className="space-y-2">
-            {phase.tasks.map((task, i) => (
-              <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
-                <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-[9px] font-bold text-slate-400">{i + 1}</span>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed">{task}</p>
+      <div data-pdf-expand className={expanded ? "border-t border-slate-100 px-5 pb-5 pt-4" : "hidden"}>
+        <div className="space-y-2">
+          {phase.tasks.map((task, i) => (
+            <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+              <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-[9px] font-bold text-slate-400">{i + 1}</span>
               </div>
-            ))}
-          </div>
+              <p className="text-xs text-slate-700 leading-relaxed">{task}</p>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -1454,21 +1449,113 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
     try {
       const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 1.5,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        ignoreElements: (element) => element.hasAttribute("data-html2canvas-ignore"),
-      });
-      const imgData = canvas.toDataURL("image/jpeg", 0.72);
+      await document.fonts.ready;
+
+      const logoImage = new Image();
+      logoImage.src = "/logo.svg";
+      await logoImage.decode();
+      const logoCanvas = document.createElement("canvas");
+      logoCanvas.width = 960;
+      logoCanvas.height = 240;
+      const logoContext = logoCanvas.getContext("2d");
+      if (!logoContext) throw new Error("Unable to create the PDF logo canvas.");
+      logoContext.drawImage(logoImage, 0, 0, logoCanvas.width, logoCanvas.height);
+      const logoData = logoCanvas.toDataURL("image/png");
+      logoContext.clearRect(0, 0, logoCanvas.width, logoCanvas.height);
+      logoContext.globalAlpha = 0.055;
+      logoContext.drawImage(logoImage, 0, 0, logoCanvas.width, logoCanvas.height);
+      const watermarkData = logoCanvas.toDataURL("image/png");
+
       const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
-      const w = pdf.internal.pageSize.getWidth();
-      const h = (canvas.height * w) / canvas.width;
-      const page = pdf.internal.pageSize.getHeight();
-      const totalPages = Math.ceil(h / page);
-      for (let i = 0; i < totalPages; i++) {
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, -(i * page), w, h);
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 14;
+      const contentTop = 24;
+      const contentBottom = pageHeight - 21;
+      const contentWidth = pageWidth - margin * 2;
+      const sections = Array.from(reportRef.current.children).filter(
+        (section) =>
+          !section.hasAttribute("data-pdf-hide") &&
+          !section.hasAttribute("data-pdf-exclude"),
+      );
+      let cursorY = contentTop;
+      let hasContentOnPage = false;
+
+      for (const section of sections) {
+        const canvas = await html2canvas(section as HTMLElement, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          ignoreElements: (element) =>
+            element.hasAttribute("data-html2canvas-ignore") ||
+            element.hasAttribute("data-pdf-hide"),
+          onclone: (clonedDocument) => {
+            clonedDocument.querySelectorAll("[data-pdf-expand]").forEach((element) => {
+              element.classList.remove("hidden");
+            });
+          },
+        });
+        if (canvas.width === 0 || canvas.height === 0) continue;
+
+        const imageData = canvas.toDataURL("image/jpeg", 0.92);
+        const maxImageHeight = contentBottom - contentTop;
+        const widthScale = contentWidth / canvas.width;
+        const heightScale = maxImageHeight / canvas.height;
+        const scale = Math.min(widthScale, heightScale);
+        const imageWidth = canvas.width * scale;
+        const imageHeight = canvas.height * scale;
+
+        if (hasContentOnPage && cursorY + imageHeight > contentBottom) {
+          pdf.addPage();
+          cursorY = contentTop;
+          hasContentOnPage = false;
+        }
+
+        pdf.addImage(
+          imageData,
+          "JPEG",
+          margin + (contentWidth - imageWidth) / 2,
+          cursorY,
+          imageWidth,
+          imageHeight,
+          undefined,
+          "FAST",
+        );
+        cursorY += imageHeight + 5;
+        hasContentOnPage = true;
+      }
+
+      if (!hasContentOnPage && pdf.getNumberOfPages() === 1) {
+        throw new Error("The report has no printable content.");
+      }
+
+      const totalPages = pdf.getNumberOfPages();
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+        pdf.setPage(pageNumber);
+        pdf.addImage(
+          watermarkData,
+          "PNG",
+          (pageWidth - 96) / 2,
+          (pageHeight - 24) / 2,
+          96,
+          24,
+        );
+        pdf.addImage(logoData, "PNG", margin, 7, 40, 10);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+        pdf.setTextColor(15, 23, 42);
+        pdf.text("AI VISIBILITY REPORT", pageWidth - margin, 10, { align: "right" });
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(displayDomain, pageWidth - margin, 15, { align: "right" });
+        pdf.setDrawColor(226, 232, 240);
+        pdf.line(margin, 20, pageWidth - margin, 20);
+        pdf.line(margin, pageHeight - 16, pageWidth - margin, pageHeight - 16);
+        pdf.setFontSize(8);
+        pdf.text("Prepared by Aibizmod - AI Visibility Audit", margin, pageHeight - 9);
+        pdf.text(`Page ${pageNumber} of ${totalPages}`, pageWidth - margin, pageHeight - 9, {
+          align: "right",
+        });
       }
       pdf.save(`ai-visibility-report-${displayDomain}.pdf`);
     } catch (e) {
@@ -1512,7 +1599,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
               </div>
             </div>
           </div>
-          <div className="sm:ml-auto flex items-center gap-3">
+          <div data-pdf-hide className="sm:ml-auto flex items-center gap-3">
             <button
               onClick={exportPDF}
               disabled={exporting}
@@ -1531,14 +1618,14 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {exportError && (
-        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p data-pdf-hide role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {exportError}
         </p>
       )}
 
       {/* ── Hosted report link ────────────────────────────────────────────── */}
       {hostedReportId && (
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
+        <div data-pdf-hide className="flex flex-col lg:flex-row lg:items-center gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Link2 className="h-4 w-4 text-cyan-600 flex-shrink-0" />
             <p className="text-xs sm:text-sm text-slate-700">
@@ -1689,7 +1776,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {!isAuthenticated && (
-        <div className="flex items-center justify-center py-8">
+        <div data-pdf-hide className="flex items-center justify-center py-8">
           <button
             onClick={() => setShowSignInModal(true)}
             data-aibizmod-track="View Full Report CTA"
@@ -1702,7 +1789,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       )}
 
       {isAuthenticated && (
-        <div className="flex items-center justify-center py-6">
+        <div data-pdf-hide className="flex items-center justify-center py-6">
           <div className="inline-flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-slate-900">
@@ -1725,7 +1812,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       <SignInModal isOpen={showSignInModal} onClose={() => setShowSignInModal(false)} />
 
       {/* ── SECTION 3: AI Platform Compatibility ───────────────────────────── */}
-      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Globe className="h-5 w-5" />}
           title="AI Platform Compatibility"
@@ -1739,7 +1826,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
 
       {/* ── SECTION 4: AI Citability Deep Dive ────────────────────────────── */}
       {citabilityCategory && (
-        <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+        <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<BookOpen className="h-5 w-5" />}
             title="AI Citability Deep Dive"
@@ -1755,7 +1842,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       )}
 
       {/* ── SECTION 5: Entity Recognition ─────────────────────────────────── */}
-      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Network className="h-5 w-5" />}
           title="Entity Recognition & Knowledge Graph"
@@ -1778,7 +1865,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── SECTION 6: Content Quality Analysis ───────────────────────────── */}
-      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<FileText className="h-5 w-5" />}
           title="Content Quality Analysis"
@@ -1792,7 +1879,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
 
       {/* ── SECTION 7: Critical Issues ─────────────────────────────────────── */}
       {auditIssues.length > 0 ? (
-        <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+        <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<AlertTriangle className="h-5 w-5" />}
             title="Issues & Recommendations"
@@ -1814,7 +1901,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
 
       {/* ── SECTION 8: Quick Wins ─────────────────────────────────────────── */}
       {result.quickWins?.length > 0 && (
-        <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+        <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
           <SectionHeader
             icon={<Zap className="h-5 w-5" />}
             title="Quick Wins"
@@ -1830,7 +1917,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       )}
 
       {/* ── SECTION 9: Priority Roadmap ───────────────────────────────────── */}
-      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Target className="h-5 w-5" />}
           title="6-Month Priority Roadmap"
@@ -1858,7 +1945,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── SECTION 10: Key Pages Analyzed ────────────────────────────────── */}
-      <div className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
+      <div data-pdf-exclude={!isAuthenticated ? "true" : undefined} className={cn("bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm", isAuthenticated ? "" : "blur-sm select-none")}>
         <SectionHeader
           icon={<Globe className="h-5 w-5" />}
           title="Key Pages Analyzed"
@@ -1875,7 +1962,7 @@ function AuditReport({ result, domain }: { result: AuditResult; domain: string }
       </div>
 
       {/* ── CTA ───────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 sm:p-10 text-center shadow-xl">
+      <div data-pdf-hide className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 sm:p-10 text-center shadow-xl">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-transparent to-cyan-500/10" />
         <div className="relative">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white/80 text-xs font-medium mb-4">
