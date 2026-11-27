@@ -5,6 +5,15 @@ import './globals.css';
 import SmoothScroll from '@/components/providers/SmoothScroll';
 import { AibizmodAuthProvider } from '@/components/providers/AibizmodAuthProvider';
 import { AibizmodTrackingInit } from '@/components/providers/AibizmodTrackingInit';
+import { services } from '@/data/services';
+
+const serviceAreas = [
+	{ '@type': 'City', name: 'London' },
+	{ '@type': 'City', name: 'New York' },
+	{ '@type': 'City', name: 'Bengaluru' },
+	{ '@type': 'City', name: 'Singapore' },
+	{ '@type': 'City', name: 'Sydney' },
+];
 
 const generalSans = localFont({
 	src: [
@@ -33,13 +42,7 @@ const entityGraph = {
 				'End-to-end technology services for modern businesses — web development, mobile apps, digital marketing, cloud infrastructure, and automation.',
 			email: 'hello@aibizmod.com',
 			telephone: '+442079460958',
-			areaServed: [
-				{ '@type': 'City', name: 'London' },
-				{ '@type': 'City', name: 'New York' },
-				{ '@type': 'City', name: 'Bengaluru' },
-				{ '@type': 'City', name: 'Singapore' },
-				{ '@type': 'City', name: 'Sydney' },
-			],
+			areaServed: serviceAreas,
 			foundingDate: '2019',
 			sameAs: [
 				'https://linkedin.com/company/aibizmod',
@@ -103,12 +106,23 @@ const entityGraph = {
 					'https://bibinprathap.github.io/VeritasGraph/index.html',
 				],
 			},
-			author: {
-				'@type': 'Person',
-				name: 'Bibin Prathap',
-				url: 'https://bibinprathap.com',
-			},
+			author: { '@id': 'https://aibizmod.com/#bibin-prathap' },
 		},
+		{
+			'@type': 'Person',
+			'@id': 'https://aibizmod.com/#bibin-prathap',
+			name: 'Bibin Prathap',
+			url: 'https://bibinprathap.com',
+		},
+		...services.map((service) => ({
+			'@type': 'Service',
+			'@id': `https://aibizmod.com${service.href}#service`,
+			name: service.name,
+			description: service.description,
+			url: `https://aibizmod.com${service.href}`,
+			provider: { '@id': 'https://aibizmod.com/#organization' },
+			areaServed: serviceAreas,
+		})),
 	],
 };
 
